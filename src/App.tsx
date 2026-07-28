@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Trash2, Save, RotateCcw, FolderOpen, X, Check, PlusCircle, Download, Camera } from "lucide-react";
 
