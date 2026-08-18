@@ -11,7 +11,7 @@ import { Trash2, Save, RotateCcw, FolderOpen, X, Check, PlusCircle, Download, Ca
    espacio reservado para logo + folio/fecha a la derecha.
 
    Dos temas (oscuro / claro) intercambiables desde el botón sol/luna,
-   con preferencia guardada en window.storage ("theme-preference"). La
+   con preferencia guardada en localStorage ("theme-preference"). La
    lógica de cálculo, guardado y exportación no cambió respecto a antes.
 
    El buscador dinámico (SearchableSelect) conserva el punto de color
@@ -72,6 +72,32 @@ const ThemeContext = createContext(DARK_THEME);
 const ThemeToggleContext = createContext(() => {});
 
 const LOGO_URL = "https://jxyosutthiuzbrmdznoa.supabase.co/storage/v1/object/public/promociones/b14e8554-c82a-4a60-9e1b-4ccd17fa9ef2.jpeg";
+
+/* ---------------------------------------------------------------------
+   Persistencia: localStorage del navegador (funciona en cualquier sitio
+   real, a diferencia de window.storage que solo existe en la vista
+   previa de artefactos de Claude). Todas las funciones son a prueba de
+   fallos — si localStorage no está disponible (modo privado, cuota
+   llena, etc.) simplemente no truenan.
+--------------------------------------------------------------------- */
+const localStore = {
+  get: async (key) => {
+    try {
+      const v = window.localStorage.getItem(key);
+      return v === null ? null : { key, value: v };
+    } catch (e) {
+      return null;
+    }
+  },
+  set: async (key, value) => {
+    try {
+      window.localStorage.setItem(key, value);
+      return { key, value };
+    } catch (e) {
+      return null;
+    }
+  },
+};
 
 const FONT_SANS = "'Inter', -apple-system, system-ui, sans-serif";
 const FONT_MONO = "'JetBrains Mono', 'IBM Plex Mono', ui-monospace, 'SF Mono', monospace";
@@ -880,14 +906,14 @@ function CotizadorInner() {
   useEffect(() => {
     (async () => {
       try {
-        const current = await window.storage.get("current-quote");
+        const current = await localStore.get("current-quote");
         if (current?.value) {
           const parsed = JSON.parse(current.value);
           if (Array.isArray(parsed)) setProducts(parsed);
         }
       } catch (e) {}
       try {
-        const saved = await window.storage.get("saved-quotes");
+        const saved = await localStore.get("saved-quotes");
         if (saved?.value) {
           const parsed = JSON.parse(saved.value);
           if (Array.isArray(parsed)) setSavedQuotes(parsed);
@@ -900,7 +926,7 @@ function CotizadorInner() {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
       try {
-        await window.storage.set("current-quote", JSON.stringify(products));
+        await localStore.set("current-quote", JSON.stringify(products));
       } catch (e) {}
     }, 600);
     return () => clearTimeout(saveTimer.current);
@@ -919,7 +945,7 @@ function CotizadorInner() {
 
   const persistSavedQuotes = async (list) => {
     try {
-      await window.storage.set("saved-quotes", JSON.stringify(list));
+      await localStore.set("saved-quotes", JSON.stringify(list));
     } catch (e) {
       setStatus("No se pudo guardar.");
     }
@@ -1346,12 +1372,12 @@ function CotizadorInner() {
 }
 
 export default function Cotizador() {
-  const [themeName, setThemeName] = useState("dark");
+  const [themeName, setThemeName] = useState("light");
 
   useEffect(() => {
     (async () => {
       try {
-        const pref = await window.storage.get("theme-preference");
+        const pref = await localStore.get("theme-preference");
         if (pref?.value === "light" || pref?.value === "dark") setThemeName(pref.value);
       } catch (e) {}
     })();
@@ -1360,7 +1386,7 @@ export default function Cotizador() {
   const toggleTheme = () => {
     setThemeName((prev) => {
       const next = prev === "dark" ? "light" : "dark";
-      window.storage.set("theme-preference", next).catch(() => {});
+      localStore.set("theme-preference", next).catch(() => {});
       return next;
     });
   };
