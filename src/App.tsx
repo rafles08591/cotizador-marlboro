@@ -237,8 +237,6 @@ const MARCAS = [
 ];
 const marcaDe = (nombre) => MARCAS.find((m) => nombre.startsWith(m.key)) || { key: "OTRO", label: "Otro", color: "#8793A6" };
 
-const PRECIO_MAX_CATALOGO = Math.max(...CATALOGO.map((c) => c.precio));
-
 const catalogoOptions = CATALOGO.map((c) => {
   const marca = marcaDe(c.nombre);
   return {
@@ -247,7 +245,6 @@ const catalogoOptions = CATALOGO.map((c) => {
     meta: fmt(c.precio),
     dotColor: marca.color,
     marcaLabel: marca.label,
-    bar: c.precio / PRECIO_MAX_CATALOGO,
   };
 });
 const sucursalOptions = SUCURSALES.map((s) => ({ value: s, label: s }));
@@ -460,16 +457,11 @@ function SearchableSelect({ label, value, options, onChange, placeholder = "Sele
                       </span>
                     )}
                   </div>
-                  {typeof opt.bar === "number" && (
-                    <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 5 }}>
-                      <div style={{ flex: 1, height: 3, borderRadius: 2, background: isHi ? "rgba(255,255,255,0.30)" : COLORS.trackBg, overflow: "hidden" }}>
-                        <div style={{ width: `${Math.max(6, opt.bar * 100)}%`, height: "100%", borderRadius: 2, background: opt.dotColor || accentColor }} />
-                      </div>
-                      {opt.marcaLabel && (
-                        <span style={{ fontSize: 9.5, fontFamily: FONT_MONO, color: mutedColor, whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                          {opt.marcaLabel}
-                        </span>
-                      )}
+                  {opt.marcaLabel && (
+                    <div style={{ marginTop: 3 }}>
+                      <span style={{ fontSize: 9.5, fontFamily: FONT_MONO, color: mutedColor, whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                        {opt.marcaLabel}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -533,21 +525,6 @@ function ResultLine({ label, value, bold, accent }) {
       }}>
         {value}
       </span>
-    </div>
-  );
-}
-
-/* Barra de margen: medidor horizontal para el % de ganancia de un combo. */
-function MargenBar({ pct }) {
-  const COLORS = useContext(ThemeContext);
-  const clamped = Math.max(0, Math.min(100, pct));
-  const color = pct < 0 ? COLORS.red : pct < 15 ? COLORS.gold : COLORS.green;
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
-      <div style={{ flex: 1, height: 5, borderRadius: 3, background: COLORS.trackBg, overflow: "hidden" }}>
-        <div style={{ width: `${clamped}%`, height: "100%", borderRadius: 3, background: color, transition: "width .2s ease" }} />
-      </div>
-      <span style={{ fontSize: 10.5, fontFamily: FONT_MONO, color, fontWeight: 700, whiteSpace: "nowrap" }}>{pct.toFixed(1)}%</span>
     </div>
   );
 }
@@ -749,12 +726,11 @@ function ProductTicket({ product, onChange, onRemove, sucursal }) {
         </div>
 
         <div style={{ borderTop: `1px solid ${COLORS.line}`, marginTop: 14, paddingTop: 10 }}>
-          <ResultLine label="Desglose de distribución" value={`${r.cajetillasPlc.toFixed(2)} caj × ${fmt(costoDistribucionPorClo(sucursal))} = ${fmt(r.distribucion)}`} accent="red" />
-          <ResultLine label="Bonificación (PLC)" value={fmt(r.bonificacion)} accent="red" />
+          <ResultLine label="Desglose de distribución" value={`${r.cajetillasPlc.toFixed(2)} caj × ${fmt(costoDistribucionPorClo(sucursal))} = ${fmt(r.distribucion)}`} />
+          <ResultLine label="Bonificación (PLC)" value={fmt(r.bonificacion)} />
           <div style={{ borderTop: `1px solid ${COLORS.line}`, marginTop: 6, paddingTop: 6 }}>
             <ResultLine label="Precio descontando PLC" value={fmt(r.costoPorPaqueteConPlc)} bold accent="green" />
             <ResultLine label="Margen de ganancia" value={`${r.margenGanancia.toFixed(2)}%`} bold />
-            <MargenBar pct={r.margenGanancia} />
           </div>
         </div>
       </div>
@@ -789,8 +765,8 @@ function ProductTicket({ product, onChange, onRemove, sucursal }) {
           <>
             <ResultLine label="Costo (cortesía)" value={fmt(0)} />
             <ResultLine label="Precio de lista (referencia)" value={fmt(product.precioListaReferencia)} />
-            <ResultLine label="Bonificación (cantidad × precio de lista)" value={fmt(r.bonificacion)} bold accent="red" />
-            <ResultLine label="Desglose de distribución" value={fmt(r.distribucion)} accent="red" />
+            <ResultLine label="Bonificación (cantidad × precio de lista)" value={fmt(r.bonificacion)} bold />
+            <ResultLine label="Desglose de distribución" value={fmt(r.distribucion)} />
           </>
         ) : (
           <>
@@ -1000,13 +976,6 @@ function CotizadorInner() {
 
   const totalCotizar = totals.costo + totals.distribucion;
 
-  const composicion = useMemo(() => ([
-    { label: "Costo de línea", value: totals.costo, color: COLORS.cyan },
-    { label: "Distribución", value: totals.distribucion, color: COLORS.gold },
-    { label: "Bonificación PLC (cortesía)", value: totals.bonificacion, color: COLORS.purple },
-  ]), [totals, COLORS]);
-  const composicionMax = Math.max(1, ...composicion.map((c) => c.value));
-
   const escapeHtml = (s) =>
     String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -1046,7 +1015,7 @@ function CotizadorInner() {
     .meta { display:flex; justify-content:space-between; font-size:12px; color:#5C6779; border-top:1px solid rgba(20,27,41,0.10); padding-top:8px; margin-top:8px; font-family:'JetBrains Mono',ui-monospace,monospace; }
     table { width:100%; border-collapse:collapse; margin-top:16px; font-size:13px; }
     td { padding:5px 0; }
-    .totales td { border-top:1px solid rgba(20,27,41,0.10); padding-top:8px; color:#B85662; font-weight:600; }
+    .totales td { border-top:1px solid rgba(20,27,41,0.10); padding-top:8px; color:#141B29; font-weight:600; }
     .total-final td { font-weight:800; font-size:16px; color:#2E9A6C; border-top:1px solid rgba(20,27,41,0.10); padding-top:8px; }
   </style>
 </head>
@@ -1185,8 +1154,18 @@ function CotizadorInner() {
 
         {products.length > 0 && (
           <div style={{ ...cardBase, padding: 16 }}>
-            <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.08em", color: COLORS.inkMuted, marginBottom: 12 }}>
-              Resumen de cotización
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 8, background: COLORS.logoBoxBg, border: `1px solid ${COLORS.line}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" }}>
+                <img
+                  src={LOGO_URL}
+                  alt="Logo"
+                  style={{ width: "100%", height: "100%", objectFit: "contain", padding: 3, boxSizing: "border-box" }}
+                  onError={(e) => { e.currentTarget.style.display = "none"; }}
+                />
+              </div>
+              <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.08em", color: COLORS.inkMuted }}>
+                Resumen de cotización
+              </div>
             </div>
 
             {products.map((p) => (
@@ -1206,27 +1185,10 @@ function CotizadorInner() {
 
             <div style={{ borderTop: `1px solid ${COLORS.line}`, marginTop: 10, paddingTop: 10 }}>
               <ResultLine label="Paquetes PLC entregados" value={totals.paquetesPlc.toFixed(2)} />
-              <ResultLine label="Bonificación total" value={fmt(totals.bonificacion)} accent="red" />
-              <ResultLine label="Desglose de distribución" value={fmt(totals.distribucion)} accent="red" />
+              <ResultLine label="Bonificación total" value={fmt(totals.bonificacion)} />
+              <ResultLine label="Desglose de distribución" value={fmt(totals.distribucion)} />
               <div style={{ borderTop: `1px solid ${COLORS.line}`, marginTop: 6, paddingTop: 6 }}>
                 <ResultLine label="TOTAL A COTIZAR" value={fmt(totalCotizar)} bold accent="green" />
-              </div>
-            </div>
-
-            <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${COLORS.line}` }}>
-              <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: "0.06em", color: COLORS.inkMuted, marginBottom: 8, fontFamily: FONT_MONO }}>
-                Composición del total
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-                {composicion.map((c) => (
-                  <div key={c.label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ width: 96, fontSize: 10.5, color: COLORS.inkMuted, fontFamily: FONT_MONO, flexShrink: 0 }}>{c.label}</span>
-                    <div style={{ flex: 1, height: 6, borderRadius: 3, background: COLORS.trackBg, overflow: "hidden" }}>
-                      <div style={{ width: `${Math.max(2, (c.value / composicionMax) * 100)}%`, height: "100%", borderRadius: 3, background: c.color }} />
-                    </div>
-                    <span style={{ width: 74, textAlign: "right", fontSize: 10.5, color: c.color, fontFamily: FONT_MONO, fontWeight: 700, flexShrink: 0 }}>{fmt(c.value)}</span>
-                  </div>
-                ))}
               </div>
             </div>
 
@@ -1365,8 +1327,8 @@ function CotizadorInner() {
 
               <div style={{ borderTop: `1px solid ${COLORS.line}`, paddingTop: 12, marginTop: 8 }}>
                 <ResultLine label="Paquetes PLC entregados" value={totals.paquetesPlc.toFixed(2)} />
-                <ResultLine label="Bonificación total" value={fmt(totals.bonificacion)} accent="red" />
-                <ResultLine label="Desglose de distribución" value={fmt(totals.distribucion)} accent="red" />
+                <ResultLine label="Bonificación total" value={fmt(totals.bonificacion)} />
+                <ResultLine label="Desglose de distribución" value={fmt(totals.distribucion)} />
                 <div style={{ borderTop: `1px solid ${COLORS.line}`, marginTop: 6, paddingTop: 6 }}>
                   <ResultLine label="TOTAL A COTIZAR" value={fmt(totalCotizar)} bold accent="green" />
                 </div>
