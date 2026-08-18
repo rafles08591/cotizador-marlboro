@@ -282,6 +282,8 @@ function GlobalStyle() {
   const COLORS = useContext(ThemeContext);
   return (
     <style>{`
+      html, body { overflow-x: hidden; max-width: 100vw; }
+      * { box-sizing: border-box; }
       .ct-input:focus, .ct-trigger:focus-within {
         outline: none !important;
         border-color: ${COLORS.cyan} !important;
@@ -877,11 +879,9 @@ function InvoiceHeader({ folio, today }) {
         </div>
       </div>
 
-      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <ThemeToggleButton />
-          <span style={{ fontSize: 19, fontWeight: 800, letterSpacing: "0.08em", color: COLORS.ink, fontFamily: FONT_SANS }}>COTIZADOR</span>
-        </div>
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5 }}>
+        <ThemeToggleButton />
+        <span style={{ fontSize: 19, fontWeight: 800, letterSpacing: "0.06em", color: COLORS.ink, fontFamily: FONT_SANS, textAlign: "right" }}>COTIZADOR</span>
         <span style={{ fontSize: 11, color: COLORS.inkMuted, fontFamily: FONT_MONO }}>FOLIO N.º {folio}</span>
         <span style={{ fontSize: 11, color: COLORS.inkMuted, fontFamily: FONT_MONO }}>{today}</span>
       </div>
@@ -1091,9 +1091,12 @@ function CotizadorInner() {
       style={{
         minHeight: "100vh",
         width: "100%",
+        maxWidth: "100vw",
         display: "flex",
         justifyContent: "center",
         padding: "24px 12px",
+        boxSizing: "border-box",
+        overflowX: "hidden",
         backgroundColor: COLORS.pageBg,
         fontFamily: FONT_SANS,
       }}
