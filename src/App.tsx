@@ -1,23 +1,34 @@
 // @ts-nocheck
-import React, { useState, useEffect, useRef, useMemo } from "react";
-import { Trash2, Save, RotateCcw, FolderOpen, X, Check, PlusCircle, Download, Camera, Search, ChevronDown, Radio } from "lucide-react";
+import React, { useState, useEffect, useRef, useMemo, useContext, createContext } from "react";
+import { Trash2, Save, RotateCcw, FolderOpen, X, Check, PlusCircle, Download, Camera, Search, ChevronDown, Radio, Sun, Moon } from "lucide-react";
 
 /* =====================================================================
    COTIZADOR — terminal de cotización JMD
    ---------------------------------------------------------------------
-   Rediseño "consola de control": fondo profundo con orbes de luz cian /
-   fucsia, tarjetas de vidrio (glassmorphism), acentos neón y una lectura
-   tipo HUD para el total. Toda la lógica de cálculo, guardado en
-   window.storage y exportación a HTML es la misma que ya existía; solo
-   cambia la capa visual y se agrega un buscador dinámico dentro de cada
-   lista desplegable (producto principal, PLC y Clo).
+   Dos temas (oscuro / claro) intercambiables desde el botón sol/luna,
+   con preferencia guardada en window.storage ("theme-preference").
+   Todos los componentes leen su paleta vía ThemeContext, así que basta
+   con cambiar de tema para que toda la app (formulario + recibo) se
+   redibuje. La lógica de cálculo, guardado y exportación no cambió.
+
+   El buscador dinámico (SearchableSelect) ahora además:
+     - corrige el bug de contraste: cuando una fila está resaltada por
+       teclado/mouse, el texto (incluida la parte que hace match con la
+       búsqueda) usa el color "onAccent" del tema en vez del color de
+       acento, para no perderse contra el propio fondo de acento.
+     - agrega un punto de color por marca y una barra de precio relativo
+       (precio del producto vs. el más caro del catálogo) para que se
+       pueda comparar de un vistazo mientras se busca.
 ===================================================================== */
 
-const COLORS = {
+const DARK_THEME = {
+  name: "dark",
   pageBg: "#05070E",
   headerBg: "#080B14",
   cardBg: "rgba(15,22,40,0.62)",
   cardSolid: "#0D1424",
+  panelBg: "rgba(7,11,22,0.94)",
+  inputBg: "rgba(5,9,18,0.65)",
   ink: "#EAF1FB",
   inkMuted: "#7E8BA8",
   line: "rgba(148,177,214,0.16)",
@@ -28,7 +39,33 @@ const COLORS = {
   red: "#FF5D73",
   green: "#3CE6A3",
   greenDark: "#0C3C2C",
+  onAccent: "#04141A",
+  trackBg: "rgba(255,255,255,0.10)",
 };
+
+const LIGHT_THEME = {
+  name: "light",
+  pageBg: "#F3F6FB",
+  headerBg: "#FFFFFF",
+  cardBg: "rgba(255,255,255,0.78)",
+  cardSolid: "#FFFFFF",
+  panelBg: "rgba(255,255,255,0.97)",
+  inputBg: "rgba(255,255,255,0.9)",
+  ink: "#111827",
+  inkMuted: "#5B6577",
+  line: "rgba(17,24,39,0.10)",
+  lineBright: "rgba(17,24,39,0.20)",
+  cyan: "#0891B2",
+  fuchsia: "#C026D3",
+  gold: "#B45309",
+  red: "#E11D48",
+  green: "#059669",
+  greenDark: "#D1FAE5",
+  onAccent: "#FFFFFF",
+  trackBg: "rgba(17,24,39,0.08)",
+};
+
+const ThemeContext = createContext(DARK_THEME);
 
 const FONT_SANS = "'Inter', -apple-system, system-ui, sans-serif";
 const FONT_MONO = "'JetBrains Mono', 'IBM Plex Mono', ui-monospace, 'SF Mono', monospace";
@@ -181,10 +218,41 @@ function cantidadTextoSimple(p) {
   return partes.length ? partes.join(" + ") : "0";
 }
 
+/* --------------------------- Marcas / catálogo --------------------------- */
+// Color por marca: sirve para el punto de color en el buscador y para
+// agrupar visualmente el catálogo (46 productos) de un vistazo.
+const MARCAS = [
+  { key: "MARLBORO", label: "Marlboro", color: "#E11D48" },
+  { key: "BENSON", label: "Benson & Hedges", color: "#6366F1" },
+  { key: "MLB CRAFTED", label: "MLB Crafted", color: "#F59E0B" },
+  { key: "FAROS", label: "Faros", color: "#10B981" },
+  { key: "L&M", label: "L&M", color: "#EC4899" },
+  { key: "DELICADOS", label: "Delicados", color: "#8B5CF6" },
+  { key: "BARONET", label: "Baronet", color: "#0EA5E9" },
+  { key: "FARITOS", label: "Faritos", color: "#84CC16" },
+];
+const marcaDe = (nombre) => MARCAS.find((m) => nombre.startsWith(m.key)) || { key: "OTRO", label: "Otro", color: "#94A3B8" };
+
+const PRECIO_MAX_CATALOGO = Math.max(...CATALOGO.map((c) => c.precio));
+
+const catalogoOptions = CATALOGO.map((c) => {
+  const marca = marcaDe(c.nombre);
+  return {
+    value: c.id,
+    label: c.nombre,
+    meta: fmt(c.precio),
+    dotColor: marca.color,
+    marcaLabel: marca.label,
+    bar: c.precio / PRECIO_MAX_CATALOGO,
+  };
+});
+const sucursalOptions = SUCURSALES.map((s) => ({ value: s, label: s }));
+
 /* ---------------------------------------------------------------------
    Estilos globales compartidos (glow de foco, scrollbar, animaciones)
 --------------------------------------------------------------------- */
 function GlobalStyle() {
+  const COLORS = useContext(ThemeContext);
   return (
     <style>{`
       @keyframes ct-orb-a { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(30px,-24px) scale(1.08); } }
@@ -200,13 +268,13 @@ function GlobalStyle() {
       .ct-input:focus, .ct-trigger:focus-within {
         outline: none !important;
         border-color: ${COLORS.cyan} !important;
-        box-shadow: 0 0 0 3px rgba(45,225,233,0.16), 0 0 18px rgba(45,225,233,0.22) !important;
+        box-shadow: 0 0 0 3px ${COLORS.cyan}29, 0 0 18px ${COLORS.cyan}38 !important;
       }
       .ct-btn-ghost:hover { border-color: ${COLORS.cyan}66 !important; color: ${COLORS.cyan} !important; }
-      .ct-btn-primary:hover, .ct-btn-accent:hover { filter: brightness(1.1); }
-      .ct-row:hover { background: rgba(45,225,233,0.10) !important; }
+      .ct-btn-primary:hover, .ct-btn-accent:hover { filter: brightness(1.08); }
+      .ct-row:hover { background: ${COLORS.cyan}1a !important; }
       .ct-scroll::-webkit-scrollbar { width: 6px; }
-      .ct-scroll::-webkit-scrollbar-thumb { background: rgba(45,225,233,0.35); border-radius: 4px; }
+      .ct-scroll::-webkit-scrollbar-thumb { background: ${COLORS.cyan}59; border-radius: 4px; }
       .ct-scroll::-webkit-scrollbar-track { background: transparent; }
       input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-inner-spin-button { opacity: 0.5; }
     `}</style>
@@ -217,8 +285,14 @@ function GlobalStyle() {
    Buscador dinámico (combobox): reemplaza el <select> plano.
    Escribe para filtrar en vivo; también funciona como select clásico
    (click para abrir, flechas + Enter para navegar, Esc para cerrar).
+   Cuando una opción trae "bar" (0–1) se dibuja una barra de precio
+   relativo al producto más caro del catálogo, y un punto de color por
+   marca si trae "dotColor" — así se compara de un vistazo mientras
+   se escribe.
 --------------------------------------------------------------------- */
-function SearchableSelect({ label, value, options, onChange, placeholder = "Selecciona…", required, accent = COLORS.cyan }) {
+function SearchableSelect({ label, value, options, onChange, placeholder = "Selecciona…", required, accent }) {
+  const COLORS = useContext(ThemeContext);
+  const accentColor = accent || COLORS.cyan;
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [hi, setHi] = useState(0);
@@ -268,14 +342,18 @@ function SearchableSelect({ label, value, options, onChange, placeholder = "Sele
     else if (e.key === "Escape") { setOpen(false); setQuery(""); }
   };
 
-  const renderLabel = (lbl) => {
+  // isHi: la fila trae fondo sólido de acento, así que el texto (incluida
+  // la parte resaltada de la búsqueda) debe usar "onAccent", nunca el
+  // propio color de acento — de lo contrario se pierde contra su fondo.
+  const renderLabel = (lbl, isHi) => {
     if (!query.trim()) return lbl;
     const idx = norm(lbl).indexOf(norm(query));
     if (idx === -1) return lbl;
+    if (isHi) return lbl; // fondo de acento ya distingue la fila; no hace falta resaltar el texto
     return (
       <>
         {lbl.slice(0, idx)}
-        <span style={{ color: accent, fontWeight: 800 }}>{lbl.slice(idx, idx + query.length)}</span>
+        <span style={{ color: accentColor, fontWeight: 800 }}>{lbl.slice(idx, idx + query.length)}</span>
         {lbl.slice(idx + query.length)}
       </>
     );
@@ -299,14 +377,14 @@ function SearchableSelect({ label, value, options, onChange, placeholder = "Sele
           boxSizing: "border-box",
           borderRadius: 12,
           padding: "10px 12px",
-          background: "rgba(5,9,18,0.65)",
-          border: `1px solid ${open ? accent : required && !value ? COLORS.red : COLORS.line}`,
-          boxShadow: open ? `0 0 0 3px ${accent}22, 0 0 16px ${accent}33` : "none",
+          background: COLORS.inputBg,
+          border: `1px solid ${open ? accentColor : required && !value ? COLORS.red : COLORS.line}`,
+          boxShadow: open ? `0 0 0 3px ${accentColor}29, 0 0 16px ${accentColor}45` : "none",
           transition: "border-color .15s ease, box-shadow .15s ease",
           cursor: "text",
         }}
       >
-        <Search size={14} color={open ? accent : COLORS.inkMuted} style={{ flexShrink: 0 }} />
+        <Search size={14} color={open ? accentColor : COLORS.inkMuted} style={{ flexShrink: 0 }} />
         <input
           ref={inputRef}
           value={open ? query : selected ? selected.label : ""}
@@ -347,14 +425,14 @@ function SearchableSelect({ label, value, options, onChange, placeholder = "Sele
             right: 0,
             marginTop: 6,
             zIndex: 40,
-            background: "rgba(7,11,22,0.94)",
+            background: COLORS.panelBg,
             backdropFilter: "blur(18px)",
             WebkitBackdropFilter: "blur(18px)",
-            border: `1px solid ${accent}44`,
+            border: `1px solid ${accentColor}44`,
             borderRadius: 12,
-            maxHeight: 264,
+            maxHeight: 300,
             overflowY: "auto",
-            boxShadow: `0 16px 40px rgba(0,0,0,0.55), 0 0 24px ${accent}22`,
+            boxShadow: `0 16px 40px rgba(0,0,0,0.30), 0 0 24px ${accentColor}22`,
           }}
         >
           {filtered.length === 0 ? (
@@ -362,33 +440,51 @@ function SearchableSelect({ label, value, options, onChange, placeholder = "Sele
               Sin coincidencias para "{query}"
             </div>
           ) : (
-            filtered.map((opt, i) => (
-              <div
-                key={opt.value}
-                className="ct-row"
-                onMouseDown={(e) => { e.preventDefault(); commit(opt); }}
-                onMouseEnter={() => setHi(i)}
-                style={{
-                  padding: "10px 12px",
-                  fontSize: 13,
-                  cursor: "pointer",
-                  color: i === hi ? "#04141A" : COLORS.ink,
-                  background: i === hi ? accent : "transparent",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  gap: 10,
-                  transition: "background .1s ease",
-                }}
-              >
-                <span style={{ lineHeight: 1.3 }}>{renderLabel(opt.label)}</span>
-                {opt.meta && (
-                  <span style={{ fontSize: 11, fontFamily: FONT_MONO, whiteSpace: "nowrap", color: i === hi ? "#04141A" : COLORS.inkMuted, fontWeight: i === hi ? 700 : 400 }}>
-                    {opt.meta}
-                  </span>
-                )}
-              </div>
-            ))
+            filtered.map((opt, i) => {
+              const isHi = i === hi;
+              const textColor = isHi ? COLORS.onAccent : COLORS.ink;
+              const mutedColor = isHi ? COLORS.onAccent : COLORS.inkMuted;
+              return (
+                <div
+                  key={opt.value}
+                  className="ct-row"
+                  onMouseDown={(e) => { e.preventDefault(); commit(opt); }}
+                  onMouseEnter={() => setHi(i)}
+                  style={{
+                    padding: "9px 12px",
+                    cursor: "pointer",
+                    background: isHi ? accentColor : "transparent",
+                    transition: "background .1s ease",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                    <span style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13, lineHeight: 1.3, color: textColor, minWidth: 0 }}>
+                      {opt.dotColor && (
+                        <span style={{ width: 7, height: 7, borderRadius: "50%", background: opt.dotColor, flexShrink: 0, boxShadow: isHi ? "none" : `0 0 6px ${opt.dotColor}88` }} />
+                      )}
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{renderLabel(opt.label, isHi)}</span>
+                    </span>
+                    {opt.meta && (
+                      <span style={{ fontSize: 11, fontFamily: FONT_MONO, whiteSpace: "nowrap", color: textColor, fontWeight: isHi ? 700 : 600, flexShrink: 0 }}>
+                        {opt.meta}
+                      </span>
+                    )}
+                  </div>
+                  {typeof opt.bar === "number" && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 5 }}>
+                      <div style={{ flex: 1, height: 3, borderRadius: 2, background: isHi ? "rgba(255,255,255,0.28)" : COLORS.trackBg, overflow: "hidden" }}>
+                        <div style={{ width: `${Math.max(6, opt.bar * 100)}%`, height: "100%", borderRadius: 2, background: opt.dotColor || accentColor }} />
+                      </div>
+                      {opt.marcaLabel && (
+                        <span style={{ fontSize: 9.5, fontFamily: FONT_MONO, color: mutedColor, whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                          {opt.marcaLabel}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })
           )}
         </div>
       )}
@@ -397,6 +493,7 @@ function SearchableSelect({ label, value, options, onChange, placeholder = "Sele
 }
 
 function NumField({ label, value, onChange }) {
+  const COLORS = useContext(ThemeContext);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6, width: "100%" }}>
       <span style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", color: COLORS.inkMuted, fontFamily: FONT_SANS }}>
@@ -415,7 +512,7 @@ function NumField({ label, value, onChange }) {
           borderRadius: 12,
           padding: "10px 12px",
           fontSize: 15,
-          backgroundColor: "rgba(5,9,18,0.65)",
+          backgroundColor: COLORS.inputBg,
           color: COLORS.ink,
           border: `1px solid ${COLORS.line}`,
           fontFamily: FONT_MONO,
@@ -427,6 +524,7 @@ function NumField({ label, value, onChange }) {
 }
 
 function ResultLine({ label, value, bold, accent }) {
+  const COLORS = useContext(ThemeContext);
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, padding: "3px 0" }}>
       <span style={{
@@ -450,10 +548,27 @@ function ResultLine({ label, value, bold, accent }) {
   );
 }
 
-const catalogoOptions = CATALOGO.map((c) => ({ value: c.id, label: c.nombre, meta: fmt(c.precio) }));
-const sucursalOptions = SUCURSALES.map((s) => ({ value: s, label: s }));
+/* ---------------------------------------------------------------------
+   Barra de margen: pequeño medidor horizontal para el % de ganancia de
+   un combo (principal + PLC). Aporta lectura rápida sin salir de la
+   tarjeta del producto.
+--------------------------------------------------------------------- */
+function MargenBar({ pct }) {
+  const COLORS = useContext(ThemeContext);
+  const clamped = Math.max(0, Math.min(100, pct));
+  const color = pct < 0 ? COLORS.red : pct < 15 ? COLORS.gold : COLORS.green;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+      <div style={{ flex: 1, height: 5, borderRadius: 3, background: COLORS.trackBg, overflow: "hidden" }}>
+        <div style={{ width: `${clamped}%`, height: "100%", borderRadius: 3, background: color, transition: "width .2s ease" }} />
+      </div>
+      <span style={{ fontSize: 10.5, fontFamily: FONT_MONO, color, fontWeight: 700, whiteSpace: "nowrap" }}>{pct.toFixed(1)}%</span>
+    </div>
+  );
+}
 
 function AddProductForm({ onAdd, sucursal, sucursalFalta }) {
+  const COLORS = useContext(ThemeContext);
   const [principalId, setPrincipalId] = useState("");
   const [paquetesPrincipal, setPaquetesPrincipal] = useState(1);
   const [cajetillasPrincipal, setCajetillasPrincipal] = useState(0);
@@ -522,7 +637,7 @@ function AddProductForm({ onAdd, sucursal, sucursalFalta }) {
   };
 
   return (
-    <div style={{ backgroundColor: COLORS.cardBg, backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)", border: `1px solid ${COLORS.line}`, borderRadius: 16, padding: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.35)" }}>
+    <div style={{ backgroundColor: COLORS.cardBg, backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)", border: `1px solid ${COLORS.line}`, borderRadius: 16, padding: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.18)" }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em", color: COLORS.cyan, fontFamily: FONT_MONO }}>
           <Radio size={12} className="ct-led" /> Agregar producto
@@ -532,7 +647,7 @@ function AddProductForm({ onAdd, sucursal, sucursalFalta }) {
           <div style={{ fontSize: 15, fontWeight: 600, color: COLORS.ink, fontFamily: FONT_SANS }}>Producto principal</div>
           <SearchableSelect label="Producto" value={principalId} onChange={setPrincipalId} options={catalogoOptions} placeholder="Busca un producto…" accent={COLORS.cyan} />
           {principal && (
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "8px 12px", borderRadius: 12, backgroundColor: "rgba(45,225,233,0.08)", border: `1px solid ${COLORS.cyan}33`, color: COLORS.inkMuted, fontFamily: FONT_MONO }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "8px 12px", borderRadius: 12, backgroundColor: `${COLORS.cyan}14`, border: `1px solid ${COLORS.cyan}33`, color: COLORS.inkMuted, fontFamily: FONT_MONO }}>
               <span>Cajetillas x paquete: {principal.cajetillas}</span>
               <span>{fmt(principal.precio)}/paq · {fmt(costoCajetillaPrincipal)}/caj</span>
             </div>
@@ -549,7 +664,7 @@ function AddProductForm({ onAdd, sucursal, sucursalFalta }) {
           <div style={{ fontSize: 15, fontWeight: 600, color: COLORS.gold, fontFamily: FONT_SANS }}>Producto PLC (cortesía, sin costo)</div>
           <SearchableSelect label="Producto PLC" value={plcId} onChange={setPlcId} options={catalogoOptions} placeholder="Ninguno" accent={COLORS.gold} />
           {plc && (
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "8px 12px", borderRadius: 12, backgroundColor: "rgba(242,177,52,0.08)", border: `1px solid ${COLORS.gold}33`, color: COLORS.inkMuted, fontFamily: FONT_MONO }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "8px 12px", borderRadius: 12, backgroundColor: `${COLORS.gold}14`, border: `1px solid ${COLORS.gold}33`, color: COLORS.inkMuted, fontFamily: FONT_MONO }}>
               <span>Cajetillas x paquete: {plc.cajetillas}</span>
               <span>Costo: $0.00</span>
             </div>
@@ -583,7 +698,7 @@ function AddProductForm({ onAdd, sucursal, sucursalFalta }) {
             justifyContent: "center",
             gap: 8,
             background: `linear-gradient(135deg, ${COLORS.fuchsia}, ${COLORS.red})`,
-            color: "#fff",
+            color: COLORS.onAccent,
             border: "none",
             borderRadius: 16,
             padding: "13px 16px",
@@ -604,7 +719,8 @@ function AddProductForm({ onAdd, sucursal, sucursalFalta }) {
 }
 
 function ProductTicket({ product, onChange, onRemove, sucursal }) {
-  const cardStyle = { backgroundColor: COLORS.cardBg, backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)", border: `1px solid ${COLORS.line}`, borderRadius: 16, padding: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.3)" };
+  const COLORS = useContext(ThemeContext);
+  const cardStyle = { backgroundColor: COLORS.cardBg, backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)", border: `1px solid ${COLORS.line}`, borderRadius: 16, padding: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" };
 
   if (product.tipo === "combo") {
     const r = calcCombo(product, sucursal);
@@ -653,6 +769,7 @@ function ProductTicket({ product, onChange, onRemove, sucursal }) {
           <div style={{ borderTop: `1px solid ${COLORS.line}`, marginTop: 6, paddingTop: 6 }}>
             <ResultLine label="Precio descontando PLC" value={fmt(r.costoPorPaqueteConPlc)} bold accent="green" />
             <ResultLine label="Margen de ganancia" value={`${r.margenGanancia.toFixed(2)}%`} bold />
+            <MargenBar pct={r.margenGanancia} />
           </div>
         </div>
       </div>
@@ -701,7 +818,8 @@ function ProductTicket({ product, onChange, onRemove, sucursal }) {
   );
 }
 
-export default function Cotizador() {
+function CotizadorInner() {
+  const COLORS = useContext(ThemeContext);
   const [products, setProducts] = useState([]);
   const [sucursal, setSucursal] = useState("");
   const [savedQuotes, setSavedQuotes] = useState([]);
@@ -813,6 +931,18 @@ export default function Cotizador() {
 
   const totalCotizar = totals.costo + totals.distribucion;
 
+  // Desglose para la mini-gráfica de composición del total (costo vs.
+  // distribución vs. bonificación entregada como cortesía).
+  const composicion = useMemo(() => {
+    const base = Math.max(totals.costo, 1);
+    return [
+      { label: "Costo de línea", value: totals.costo, color: COLORS.cyan },
+      { label: "Distribución", value: totals.distribucion, color: COLORS.red },
+      { label: "Bonificación PLC (cortesía)", value: totals.bonificacion, color: COLORS.gold },
+    ];
+  }, [totals, COLORS]);
+  const composicionMax = Math.max(1, ...composicion.map((c) => c.value));
+
   const escapeHtml = (s) =>
     String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -825,12 +955,12 @@ export default function Cotizador() {
             <td style="text-align:right">${escapeHtml(cantidadTextoSimple(p.principal))}</td>
           </tr>
           <tr>
-            <td style="padding-left:16px;color:#F2B134">↳ PLC: ${escapeHtml(p.plc.nombre)}</td>
+            <td style="padding-left:16px;color:#B45309">↳ PLC: ${escapeHtml(p.plc.nombre)}</td>
             <td style="text-align:right">${escapeHtml(cantidadTextoSimple(p.plc))}</td>
           </tr>`;
         }
         return `<tr>
-          <td>${escapeHtml(p.nombre)}${p.tipo === "plc" ? ' <span style="color:#F2B134">(PLC)</span>' : ""}</td>
+          <td>${escapeHtml(p.nombre)}${p.tipo === "plc" ? ' <span style="color:#B45309">(PLC)</span>' : ""}</td>
           <td style="text-align:right">${escapeHtml(cantidadTextoSimple(p))}</td>
         </tr>`;
       })
@@ -842,15 +972,15 @@ export default function Cotizador() {
   <meta charset="UTF-8" />
   <title>Cotización ${folio}</title>
   <style>
-    body { font-family: -apple-system, system-ui, sans-serif; background:#05070E; padding:24px; color:#EAF1FB; }
-    .ticket { max-width:420px; margin:0 auto; background:rgba(15,22,40,0.9); padding:24px; border-radius:16px; border:1px solid rgba(148,177,214,0.18); box-shadow:0 20px 50px rgba(0,0,0,0.5); }
-    h1 { text-align:center; font-size:20px; margin:0 0 8px; background:linear-gradient(135deg,#2DE1E9,#E879F9); color:#04141A; padding:12px; border-radius:12px; letter-spacing:0.08em; }
-    .sub { text-align:center; font-size:12px; color:#7E8BA8; margin-bottom:12px; }
-    .meta { display:flex; justify-content:space-between; font-size:12px; color:#7E8BA8; border-top:1px solid rgba(148,177,214,0.18); padding-top:8px; margin-top:8px; font-family:'JetBrains Mono',ui-monospace,monospace; }
+    body { font-family: -apple-system, system-ui, sans-serif; background:#F3F6FB; padding:24px; color:#111827; }
+    .ticket { max-width:420px; margin:0 auto; background:#FFFFFF; padding:24px; border-radius:16px; border:1px solid rgba(17,24,39,0.10); box-shadow:0 20px 50px rgba(17,24,39,0.12); }
+    h1 { text-align:center; font-size:20px; margin:0 0 8px; background:linear-gradient(135deg,#0891B2,#C026D3); color:#fff; padding:12px; border-radius:12px; letter-spacing:0.08em; }
+    .sub { text-align:center; font-size:12px; color:#5B6577; margin-bottom:12px; }
+    .meta { display:flex; justify-content:space-between; font-size:12px; color:#5B6577; border-top:1px solid rgba(17,24,39,0.10); padding-top:8px; margin-top:8px; font-family:'JetBrains Mono',ui-monospace,monospace; }
     table { width:100%; border-collapse:collapse; margin-top:16px; font-size:13px; }
     td { padding:5px 0; }
-    .totales td { border-top:1px solid rgba(148,177,214,0.18); padding-top:8px; color:#FF5D73; font-weight:600; }
-    .total-final td { font-weight:800; font-size:16px; color:#3CE6A3; border-top:1px solid rgba(148,177,214,0.18); padding-top:8px; text-shadow:0 0 12px rgba(60,230,163,0.4); }
+    .totales td { border-top:1px solid rgba(17,24,39,0.10); padding-top:8px; color:#E11D48; font-weight:600; }
+    .total-final td { font-weight:800; font-size:16px; color:#059669; border-top:1px solid rgba(17,24,39,0.10); padding-top:8px; }
   </style>
 </head>
 <body>
@@ -888,8 +1018,8 @@ export default function Cotizador() {
     setTimeout(() => setStatus(""), 4000);
   };
 
-  const cardBase = { backgroundColor: COLORS.cardBg, backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)", border: `1px solid ${COLORS.line}`, borderRadius: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.3)" };
-  const ghostBtn = { display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 12px", borderRadius: 12, backgroundColor: "rgba(15,22,40,0.55)", border: `1px solid ${COLORS.line}`, fontSize: 13, color: COLORS.ink, fontFamily: FONT_SANS, cursor: "pointer", transition: "border-color .15s ease, color .15s ease" };
+  const cardBase = { backgroundColor: COLORS.cardBg, backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)", border: `1px solid ${COLORS.line}`, borderRadius: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" };
+  const ghostBtn = { display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 12px", borderRadius: 12, backgroundColor: COLORS.inputBg, border: `1px solid ${COLORS.line}`, fontSize: 13, color: COLORS.ink, fontFamily: FONT_SANS, cursor: "pointer", transition: "border-color .15s ease, color .15s ease" };
 
   return (
     <div
@@ -901,7 +1031,7 @@ export default function Cotizador() {
         justifyContent: "center",
         padding: "24px 12px",
         backgroundColor: COLORS.pageBg,
-        backgroundImage: "radial-gradient(circle at 50% 0%, rgba(45,225,233,0.05), transparent 55%)",
+        backgroundImage: `radial-gradient(circle at 50% 0%, ${COLORS.cyan}0d, transparent 55%)`,
         fontFamily: FONT_SANS,
         overflow: "hidden",
       }}
@@ -911,6 +1041,8 @@ export default function Cotizador() {
       {/* Orbes de luz ambiental */}
       <div className="ct-orb-a" style={{ position: "fixed", top: "-10%", left: "-10%", width: 340, height: 340, borderRadius: "50%", background: `radial-gradient(circle, ${COLORS.cyan}26, transparent 70%)`, filter: "blur(10px)", pointerEvents: "none", zIndex: 0 }} />
       <div className="ct-orb-b" style={{ position: "fixed", bottom: "-14%", right: "-10%", width: 380, height: 380, borderRadius: "50%", background: `radial-gradient(circle, ${COLORS.fuchsia}22, transparent 70%)`, filter: "blur(10px)", pointerEvents: "none", zIndex: 0 }} />
+
+      <ThemeToggleWrapper />
 
       <div style={{ width: "100%", maxWidth: 420, display: "flex", flexDirection: "column", gap: 16, position: "relative", zIndex: 1 }}>
 
@@ -957,7 +1089,7 @@ export default function Cotizador() {
         </div>
 
         {status && (
-          <div style={{ textAlign: "center", fontSize: 12, padding: 8, borderRadius: 12, backgroundColor: "rgba(60,230,163,0.08)", border: `1px solid ${COLORS.green}33`, color: COLORS.green, fontFamily: FONT_MONO }}>
+          <div style={{ textAlign: "center", fontSize: 12, padding: 8, borderRadius: 12, backgroundColor: `${COLORS.green}14`, border: `1px solid ${COLORS.green}33`, color: COLORS.green, fontFamily: FONT_MONO }}>
             {status}
           </div>
         )}
@@ -1039,6 +1171,24 @@ export default function Cotizador() {
               </div>
             </div>
 
+            {/* Mini-gráfica de composición: costo vs. distribución vs. bonificación */}
+            <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${COLORS.line}` }}>
+              <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: "0.06em", color: COLORS.inkMuted, marginBottom: 8, fontFamily: FONT_MONO }}>
+                Composición del total
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                {composicion.map((c) => (
+                  <div key={c.label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ width: 96, fontSize: 10.5, color: COLORS.inkMuted, fontFamily: FONT_MONO, flexShrink: 0 }}>{c.label}</span>
+                    <div style={{ flex: 1, height: 6, borderRadius: 3, background: COLORS.trackBg, overflow: "hidden" }}>
+                      <div style={{ width: `${Math.max(2, (c.value / composicionMax) * 100)}%`, height: "100%", borderRadius: 3, background: c.color }} />
+                    </div>
+                    <span style={{ width: 74, textAlign: "right", fontSize: 10.5, color: c.color, fontFamily: FONT_MONO, fontWeight: 700, flexShrink: 0 }}>{fmt(c.value)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
               <button
                 onClick={() => setShowCapture(true)}
@@ -1051,7 +1201,7 @@ export default function Cotizador() {
                   gap: 8,
                   padding: "12px",
                   borderRadius: 14,
-                  backgroundColor: "rgba(15,22,40,0.55)",
+                  backgroundColor: COLORS.inputBg,
                   border: `1px solid ${COLORS.line}`,
                   fontSize: 14,
                   fontWeight: 600,
@@ -1078,7 +1228,7 @@ export default function Cotizador() {
                   border: "none",
                   fontSize: 14,
                   fontWeight: 700,
-                  color: "#04141A",
+                  color: COLORS.onAccent,
                   fontFamily: FONT_SANS,
                   boxShadow: `0 8px 24px ${COLORS.cyan}33`,
                   cursor: "pointer",
@@ -1096,7 +1246,7 @@ export default function Cotizador() {
       </div>
 
       {showCapture && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 50, backgroundColor: COLORS.pageBg, backgroundImage: "radial-gradient(circle at 50% 0%, rgba(45,225,233,0.06), transparent 55%)", overflowY: "auto", padding: "24px 12px" }}>
+        <div style={{ position: "fixed", inset: 0, zIndex: 50, backgroundColor: COLORS.pageBg, backgroundImage: `radial-gradient(circle at 50% 0%, ${COLORS.cyan}0f, transparent 55%)`, overflowY: "auto", padding: "24px 12px" }}>
           <div style={{ maxWidth: 420, margin: "0 auto" }}>
             <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
               <button
@@ -1108,7 +1258,7 @@ export default function Cotizador() {
                   gap: 6,
                   padding: "8px 14px",
                   borderRadius: 12,
-                  backgroundColor: "rgba(15,22,40,0.55)",
+                  backgroundColor: COLORS.inputBg,
                   border: `1px solid ${COLORS.line}`,
                   fontSize: 14,
                   color: COLORS.ink,
@@ -1123,7 +1273,7 @@ export default function Cotizador() {
               <div className="ct-scanline" style={{ position: "absolute", left: 0, right: 0, height: 2, background: `linear-gradient(90deg, transparent, ${COLORS.cyan}, transparent)`, pointerEvents: "none" }} />
 
               <div style={{ background: `linear-gradient(135deg, ${COLORS.cyan}, ${COLORS.fuchsia})`, borderRadius: 12, padding: "12px 0", marginBottom: 16 }}>
-                <div style={{ textAlign: "center", color: "#04141A", fontSize: 18, fontWeight: 800, letterSpacing: "0.1em" }}>
+                <div style={{ textAlign: "center", color: COLORS.onAccent, fontSize: 18, fontWeight: 800, letterSpacing: "0.1em" }}>
                   COTIZADOR
                 </div>
               </div>
@@ -1176,5 +1326,76 @@ export default function Cotizador() {
         </div>
       )}
     </div>
+  );
+}
+
+// Botón de tema: vive dentro del ThemeContext.Provider pero necesita
+// disparar el cambio de tema que vive un nivel arriba (en Cotizador).
+const ThemeToggleContext = createContext(() => {});
+function ThemeToggleWrapper() {
+  const COLORS = useContext(ThemeContext);
+  const toggle = useContext(ThemeToggleContext);
+  const isDark = COLORS.name === "dark";
+  return (
+    <button
+      onClick={toggle}
+      aria-label="Cambiar tema"
+      style={{
+        position: "absolute",
+        top: 16,
+        right: 16,
+        zIndex: 5,
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        padding: "7px 11px",
+        borderRadius: 999,
+        background: COLORS.cardBg,
+        backdropFilter: "blur(10px)",
+        WebkitBackdropFilter: "blur(10px)",
+        border: `1px solid ${COLORS.line}`,
+        color: isDark ? COLORS.gold : COLORS.cyan,
+        fontSize: 11,
+        fontFamily: FONT_MONO,
+        fontWeight: 700,
+        cursor: "pointer",
+        textTransform: "uppercase",
+        letterSpacing: "0.04em",
+      }}
+    >
+      {isDark ? <Sun size={13} /> : <Moon size={13} />}
+      {isDark ? "Claro" : "Oscuro"}
+    </button>
+  );
+}
+
+export default function Cotizador() {
+  const [themeName, setThemeName] = useState("dark");
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const pref = await window.storage.get("theme-preference");
+        if (pref?.value === "light" || pref?.value === "dark") setThemeName(pref.value);
+      } catch (e) {}
+    })();
+  }, []);
+
+  const toggleTheme = () => {
+    setThemeName((prev) => {
+      const next = prev === "dark" ? "light" : "dark";
+      window.storage.set("theme-preference", next).catch(() => {});
+      return next;
+    });
+  };
+
+  const theme = themeName === "light" ? LIGHT_THEME : DARK_THEME;
+
+  return (
+    <ThemeContext.Provider value={theme}>
+      <ThemeToggleContext.Provider value={toggleTheme}>
+        <CotizadorInner />
+      </ThemeToggleContext.Provider>
+    </ThemeContext.Provider>
   );
 }
