@@ -1,71 +1,77 @@
 // @ts-nocheck
 import React, { useState, useEffect, useRef, useMemo, useContext, createContext } from "react";
-import { Trash2, Save, RotateCcw, FolderOpen, X, Check, PlusCircle, Download, Camera, Search, ChevronDown, Radio, Sun, Moon } from "lucide-react";
+import { Trash2, Save, RotateCcw, FolderOpen, X, Check, PlusCircle, Download, Camera, Search, ChevronDown, Sun, Moon, Building2 } from "lucide-react";
 
 /* =====================================================================
-   COTIZADOR — terminal de cotización JMD
+   COTIZADOR — recibo corporativo JMD
    ---------------------------------------------------------------------
-   Dos temas (oscuro / claro) intercambiables desde el botón sol/luna,
-   con preferencia guardada en window.storage ("theme-preference").
-   Todos los componentes leen su paleta vía ThemeContext, así que basta
-   con cambiar de tema para que toda la app (formulario + recibo) se
-   redibuje. La lógica de cálculo, guardado y exportación no cambió.
+   Dirección visual "invoice corporativo": navy / carbón, acentos cian
+   discretos, casi sin rojo (solo un ámbar suave para avisos), botón
+   primario en degradado morado→azul, y un encabezado tipo membrete con
+   espacio reservado para logo + folio/fecha a la derecha.
 
-   El buscador dinámico (SearchableSelect) ahora además:
-     - corrige el bug de contraste: cuando una fila está resaltada por
-       teclado/mouse, el texto (incluida la parte que hace match con la
-       búsqueda) usa el color "onAccent" del tema en vez del color de
-       acento, para no perderse contra el propio fondo de acento.
-     - agrega un punto de color por marca y una barra de precio relativo
-       (precio del producto vs. el más caro del catálogo) para que se
-       pueda comparar de un vistazo mientras se busca.
+   Dos temas (oscuro / claro) intercambiables desde el botón sol/luna,
+   con preferencia guardada en window.storage ("theme-preference"). La
+   lógica de cálculo, guardado y exportación no cambió respecto a antes.
+
+   El buscador dinámico (SearchableSelect) conserva el punto de color
+   por marca y la barra de precio relativo dentro de cada opción, y el
+   bug de contraste en filas resaltadas sigue corregido (el texto usa
+   "onAccent" cuando la fila trae fondo sólido de acento).
 ===================================================================== */
 
 const DARK_THEME = {
   name: "dark",
-  pageBg: "#05070E",
-  headerBg: "#080B14",
-  cardBg: "rgba(15,22,40,0.62)",
-  cardSolid: "#0D1424",
-  panelBg: "rgba(7,11,22,0.94)",
-  inputBg: "rgba(5,9,18,0.65)",
-  ink: "#EAF1FB",
-  inkMuted: "#7E8BA8",
-  line: "rgba(148,177,214,0.16)",
-  lineBright: "rgba(148,177,214,0.30)",
-  cyan: "#2DE1E9",
-  fuchsia: "#E879F9",
-  gold: "#F2B134",
-  red: "#FF5D73",
-  green: "#3CE6A3",
-  greenDark: "#0C3C2C",
-  onAccent: "#04141A",
-  trackBg: "rgba(255,255,255,0.10)",
+  pageBg: "#0D1420",
+  headerBg: "#0B1119",
+  cardBg: "rgba(21,30,46,0.68)",
+  cardSolid: "#141C2B",
+  panelBg: "rgba(12,18,28,0.97)",
+  inputBg: "rgba(8,13,21,0.55)",
+  ink: "#E7ECF3",
+  inkMuted: "#8793A6",
+  line: "rgba(160,178,200,0.14)",
+  lineBright: "rgba(160,178,200,0.26)",
+  cyan: "#4CC3D9",
+  purple: "#7C6FF0",
+  blue: "#3E82F7",
+  gold: "#D9A55C",
+  red: "#C97B87",
+  green: "#4CB98A",
+  onAccent: "#FFFFFF",
+  trackBg: "rgba(255,255,255,0.08)",
+  logoBoxBg: "#FFFFFF",
+  logoBoxText: "#9AA5B4",
 };
 
 const LIGHT_THEME = {
   name: "light",
-  pageBg: "#F3F6FB",
+  pageBg: "#F1F4F9",
   headerBg: "#FFFFFF",
-  cardBg: "rgba(255,255,255,0.78)",
+  cardBg: "rgba(255,255,255,0.82)",
   cardSolid: "#FFFFFF",
-  panelBg: "rgba(255,255,255,0.97)",
-  inputBg: "rgba(255,255,255,0.9)",
-  ink: "#111827",
-  inkMuted: "#5B6577",
-  line: "rgba(17,24,39,0.10)",
-  lineBright: "rgba(17,24,39,0.20)",
-  cyan: "#0891B2",
-  fuchsia: "#C026D3",
-  gold: "#B45309",
-  red: "#E11D48",
-  green: "#059669",
-  greenDark: "#D1FAE5",
+  panelBg: "rgba(255,255,255,0.98)",
+  inputBg: "rgba(255,255,255,0.92)",
+  ink: "#141B29",
+  inkMuted: "#5C6779",
+  line: "rgba(20,27,41,0.10)",
+  lineBright: "rgba(20,27,41,0.20)",
+  cyan: "#0E8FA8",
+  purple: "#6558D3",
+  blue: "#2E6FE0",
+  gold: "#B3792E",
+  red: "#B85662",
+  green: "#2E9A6C",
   onAccent: "#FFFFFF",
-  trackBg: "rgba(17,24,39,0.08)",
+  trackBg: "rgba(20,27,41,0.08)",
+  logoBoxBg: "#FFFFFF",
+  logoBoxText: "#9AA5B4",
 };
 
 const ThemeContext = createContext(DARK_THEME);
+const ThemeToggleContext = createContext(() => {});
+
+const LOGO_URL = "https://jxyosutthiuzbrmdznoa.supabase.co/storage/v1/object/public/promociones/b14e8554-c82a-4a60-9e1b-4ccd17fa9ef2.jpeg";
 
 const FONT_SANS = "'Inter', -apple-system, system-ui, sans-serif";
 const FONT_MONO = "'JetBrains Mono', 'IBM Plex Mono', ui-monospace, 'SF Mono', monospace";
@@ -219,19 +225,17 @@ function cantidadTextoSimple(p) {
 }
 
 /* --------------------------- Marcas / catálogo --------------------------- */
-// Color por marca: sirve para el punto de color en el buscador y para
-// agrupar visualmente el catálogo (46 productos) de un vistazo.
 const MARCAS = [
-  { key: "MARLBORO", label: "Marlboro", color: "#E11D48" },
-  { key: "BENSON", label: "Benson & Hedges", color: "#6366F1" },
-  { key: "MLB CRAFTED", label: "MLB Crafted", color: "#F59E0B" },
-  { key: "FAROS", label: "Faros", color: "#10B981" },
-  { key: "L&M", label: "L&M", color: "#EC4899" },
-  { key: "DELICADOS", label: "Delicados", color: "#8B5CF6" },
-  { key: "BARONET", label: "Baronet", color: "#0EA5E9" },
-  { key: "FARITOS", label: "Faritos", color: "#84CC16" },
+  { key: "MARLBORO", label: "Marlboro", color: "#C97B87" },
+  { key: "BENSON", label: "Benson & Hedges", color: "#7C6FF0" },
+  { key: "MLB CRAFTED", label: "MLB Crafted", color: "#D9A55C" },
+  { key: "FAROS", label: "Faros", color: "#4CB98A" },
+  { key: "L&M", label: "L&M", color: "#3E82F7" },
+  { key: "DELICADOS", label: "Delicados", color: "#9B8CF2" },
+  { key: "BARONET", label: "Baronet", color: "#4CC3D9" },
+  { key: "FARITOS", label: "Faritos", color: "#7FB88A" },
 ];
-const marcaDe = (nombre) => MARCAS.find((m) => nombre.startsWith(m.key)) || { key: "OTRO", label: "Otro", color: "#94A3B8" };
+const marcaDe = (nombre) => MARCAS.find((m) => nombre.startsWith(m.key)) || { key: "OTRO", label: "Otro", color: "#8793A6" };
 
 const PRECIO_MAX_CATALOGO = Math.max(...CATALOGO.map((c) => c.precio));
 
@@ -249,32 +253,22 @@ const catalogoOptions = CATALOGO.map((c) => {
 const sucursalOptions = SUCURSALES.map((s) => ({ value: s, label: s }));
 
 /* ---------------------------------------------------------------------
-   Estilos globales compartidos (glow de foco, scrollbar, animaciones)
+   Estilos globales compartidos (foco accesible, scrollbar)
 --------------------------------------------------------------------- */
 function GlobalStyle() {
   const COLORS = useContext(ThemeContext);
   return (
     <style>{`
-      @keyframes ct-orb-a { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(30px,-24px) scale(1.08); } }
-      @keyframes ct-orb-b { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(-26px,20px) scale(1.05); } }
-      @keyframes ct-scan { 0% { top: -10%; opacity: 0; } 10% { opacity: .55; } 90% { opacity: .55; } 100% { top: 110%; opacity: 0; } }
-      @keyframes ct-pulse { 0%,100% { opacity: 1; } 50% { opacity: .55; } }
-      @keyframes ct-blink { 0%,49% { opacity: 1; } 50%,100% { opacity: .15; } }
-      .ct-orb-a { animation: ct-orb-a 14s ease-in-out infinite; }
-      .ct-orb-b { animation: ct-orb-b 17s ease-in-out infinite; }
-      .ct-scanline { animation: ct-scan 3.4s linear infinite; }
-      .ct-led { animation: ct-pulse 2.4s ease-in-out infinite; }
-      .ct-cursor { animation: ct-blink 1.1s steps(1) infinite; }
       .ct-input:focus, .ct-trigger:focus-within {
         outline: none !important;
         border-color: ${COLORS.cyan} !important;
-        box-shadow: 0 0 0 3px ${COLORS.cyan}29, 0 0 18px ${COLORS.cyan}38 !important;
+        box-shadow: 0 0 0 3px ${COLORS.cyan}22 !important;
       }
-      .ct-btn-ghost:hover { border-color: ${COLORS.cyan}66 !important; color: ${COLORS.cyan} !important; }
-      .ct-btn-primary:hover, .ct-btn-accent:hover { filter: brightness(1.08); }
-      .ct-row:hover { background: ${COLORS.cyan}1a !important; }
+      .ct-btn-ghost:hover { border-color: ${COLORS.cyan}55 !important; color: ${COLORS.cyan} !important; }
+      .ct-btn-primary:hover, .ct-btn-accent:hover { filter: brightness(1.06); }
+      .ct-row:hover { background: ${COLORS.cyan}14 !important; }
       .ct-scroll::-webkit-scrollbar { width: 6px; }
-      .ct-scroll::-webkit-scrollbar-thumb { background: ${COLORS.cyan}59; border-radius: 4px; }
+      .ct-scroll::-webkit-scrollbar-thumb { background: ${COLORS.cyan}55; border-radius: 4px; }
       .ct-scroll::-webkit-scrollbar-track { background: transparent; }
       input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-inner-spin-button { opacity: 0.5; }
     `}</style>
@@ -285,10 +279,6 @@ function GlobalStyle() {
    Buscador dinámico (combobox): reemplaza el <select> plano.
    Escribe para filtrar en vivo; también funciona como select clásico
    (click para abrir, flechas + Enter para navegar, Esc para cerrar).
-   Cuando una opción trae "bar" (0–1) se dibuja una barra de precio
-   relativo al producto más caro del catálogo, y un punto de color por
-   marca si trae "dotColor" — así se compara de un vistazo mientras
-   se escribe.
 --------------------------------------------------------------------- */
 function SearchableSelect({ label, value, options, onChange, placeholder = "Selecciona…", required, accent }) {
   const COLORS = useContext(ThemeContext);
@@ -349,7 +339,7 @@ function SearchableSelect({ label, value, options, onChange, placeholder = "Sele
     if (!query.trim()) return lbl;
     const idx = norm(lbl).indexOf(norm(query));
     if (idx === -1) return lbl;
-    if (isHi) return lbl; // fondo de acento ya distingue la fila; no hace falta resaltar el texto
+    if (isHi) return lbl;
     return (
       <>
         {lbl.slice(0, idx)}
@@ -363,7 +353,7 @@ function SearchableSelect({ label, value, options, onChange, placeholder = "Sele
     <div ref={rootRef} style={{ position: "relative", display: "flex", flexDirection: "column", gap: 6, width: "100%" }}>
       {label && (
         <span style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em", color: COLORS.inkMuted, fontFamily: FONT_SANS }}>
-          {label} {required && <span style={{ color: COLORS.red }}>*</span>}
+          {label} {required && <span style={{ color: COLORS.gold }}>*</span>}
         </span>
       )}
       <div
@@ -378,8 +368,8 @@ function SearchableSelect({ label, value, options, onChange, placeholder = "Sele
           borderRadius: 12,
           padding: "10px 12px",
           background: COLORS.inputBg,
-          border: `1px solid ${open ? accentColor : required && !value ? COLORS.red : COLORS.line}`,
-          boxShadow: open ? `0 0 0 3px ${accentColor}29, 0 0 16px ${accentColor}45` : "none",
+          border: `1px solid ${open ? accentColor : required && !value ? COLORS.gold : COLORS.line}`,
+          boxShadow: open ? `0 0 0 3px ${accentColor}22` : "none",
           transition: "border-color .15s ease, box-shadow .15s ease",
           cursor: "text",
         }}
@@ -426,13 +416,13 @@ function SearchableSelect({ label, value, options, onChange, placeholder = "Sele
             marginTop: 6,
             zIndex: 40,
             background: COLORS.panelBg,
-            backdropFilter: "blur(18px)",
-            WebkitBackdropFilter: "blur(18px)",
-            border: `1px solid ${accentColor}44`,
+            backdropFilter: "blur(14px)",
+            WebkitBackdropFilter: "blur(14px)",
+            border: `1px solid ${COLORS.line}`,
             borderRadius: 12,
             maxHeight: 300,
             overflowY: "auto",
-            boxShadow: `0 16px 40px rgba(0,0,0,0.30), 0 0 24px ${accentColor}22`,
+            boxShadow: "0 14px 34px rgba(8,13,21,0.28)",
           }}
         >
           {filtered.length === 0 ? (
@@ -460,7 +450,7 @@ function SearchableSelect({ label, value, options, onChange, placeholder = "Sele
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
                     <span style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13, lineHeight: 1.3, color: textColor, minWidth: 0 }}>
                       {opt.dotColor && (
-                        <span style={{ width: 7, height: 7, borderRadius: "50%", background: opt.dotColor, flexShrink: 0, boxShadow: isHi ? "none" : `0 0 6px ${opt.dotColor}88` }} />
+                        <span style={{ width: 7, height: 7, borderRadius: "50%", background: opt.dotColor, flexShrink: 0 }} />
                       )}
                       <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{renderLabel(opt.label, isHi)}</span>
                     </span>
@@ -472,7 +462,7 @@ function SearchableSelect({ label, value, options, onChange, placeholder = "Sele
                   </div>
                   {typeof opt.bar === "number" && (
                     <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 5 }}>
-                      <div style={{ flex: 1, height: 3, borderRadius: 2, background: isHi ? "rgba(255,255,255,0.28)" : COLORS.trackBg, overflow: "hidden" }}>
+                      <div style={{ flex: 1, height: 3, borderRadius: 2, background: isHi ? "rgba(255,255,255,0.30)" : COLORS.trackBg, overflow: "hidden" }}>
                         <div style={{ width: `${Math.max(6, opt.bar * 100)}%`, height: "100%", borderRadius: 2, background: opt.dotColor || accentColor }} />
                       </div>
                       {opt.marcaLabel && (
@@ -540,7 +530,6 @@ function ResultLine({ label, value, bold, accent }) {
         color: accent === "green" ? COLORS.green : accent === "red" ? COLORS.red : COLORS.ink,
         fontFamily: FONT_MONO,
         fontWeight: bold ? 800 : 500,
-        textShadow: bold && accent === "green" ? `0 0 14px ${COLORS.green}55` : "none",
       }}>
         {value}
       </span>
@@ -548,11 +537,7 @@ function ResultLine({ label, value, bold, accent }) {
   );
 }
 
-/* ---------------------------------------------------------------------
-   Barra de margen: pequeño medidor horizontal para el % de ganancia de
-   un combo (principal + PLC). Aporta lectura rápida sin salir de la
-   tarjeta del producto.
---------------------------------------------------------------------- */
+/* Barra de margen: medidor horizontal para el % de ganancia de un combo. */
 function MargenBar({ pct }) {
   const COLORS = useContext(ThemeContext);
   const clamped = Math.max(0, Math.min(100, pct));
@@ -637,17 +622,17 @@ function AddProductForm({ onAdd, sucursal, sucursalFalta }) {
   };
 
   return (
-    <div style={{ backgroundColor: COLORS.cardBg, backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)", border: `1px solid ${COLORS.line}`, borderRadius: 16, padding: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.18)" }}>
+    <div style={{ backgroundColor: COLORS.cardBg, backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: `1px solid ${COLORS.line}`, borderRadius: 16, padding: 16, boxShadow: "0 8px 24px rgba(8,13,21,0.16)" }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em", color: COLORS.cyan, fontFamily: FONT_MONO }}>
-          <Radio size={12} className="ct-led" /> Agregar producto
+        <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em", color: COLORS.inkMuted, fontFamily: FONT_MONO, fontWeight: 700 }}>
+          Agregar producto
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <div style={{ fontSize: 15, fontWeight: 600, color: COLORS.ink, fontFamily: FONT_SANS }}>Producto principal</div>
           <SearchableSelect label="Producto" value={principalId} onChange={setPrincipalId} options={catalogoOptions} placeholder="Busca un producto…" accent={COLORS.cyan} />
           {principal && (
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "8px 12px", borderRadius: 12, backgroundColor: `${COLORS.cyan}14`, border: `1px solid ${COLORS.cyan}33`, color: COLORS.inkMuted, fontFamily: FONT_MONO }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "8px 12px", borderRadius: 12, backgroundColor: `${COLORS.cyan}12`, border: `1px solid ${COLORS.cyan}30`, color: COLORS.inkMuted, fontFamily: FONT_MONO }}>
               <span>Cajetillas x paquete: {principal.cajetillas}</span>
               <span>{fmt(principal.precio)}/paq · {fmt(costoCajetillaPrincipal)}/caj</span>
             </div>
@@ -664,7 +649,7 @@ function AddProductForm({ onAdd, sucursal, sucursalFalta }) {
           <div style={{ fontSize: 15, fontWeight: 600, color: COLORS.gold, fontFamily: FONT_SANS }}>Producto PLC (cortesía, sin costo)</div>
           <SearchableSelect label="Producto PLC" value={plcId} onChange={setPlcId} options={catalogoOptions} placeholder="Ninguno" accent={COLORS.gold} />
           {plc && (
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "8px 12px", borderRadius: 12, backgroundColor: `${COLORS.gold}14`, border: `1px solid ${COLORS.gold}33`, color: COLORS.inkMuted, fontFamily: FONT_MONO }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "8px 12px", borderRadius: 12, backgroundColor: `${COLORS.gold}12`, border: `1px solid ${COLORS.gold}30`, color: COLORS.inkMuted, fontFamily: FONT_MONO }}>
               <span>Cajetillas x paquete: {plc.cajetillas}</span>
               <span>Costo: $0.00</span>
             </div>
@@ -683,7 +668,7 @@ function AddProductForm({ onAdd, sucursal, sucursalFalta }) {
         </div>
 
         {sucursalFalta && (
-          <div style={{ fontSize: 13, color: COLORS.red, fontFamily: FONT_MONO }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: COLORS.gold, fontFamily: FONT_SANS, backgroundColor: `${COLORS.gold}14`, border: `1px solid ${COLORS.gold}33`, borderRadius: 10, padding: "9px 12px" }}>
             Selecciona un Clo antes de agregar productos.
           </div>
         )}
@@ -697,16 +682,16 @@ function AddProductForm({ onAdd, sucursal, sucursalFalta }) {
             alignItems: "center",
             justifyContent: "center",
             gap: 8,
-            background: `linear-gradient(135deg, ${COLORS.fuchsia}, ${COLORS.red})`,
+            background: `linear-gradient(135deg, ${COLORS.purple}, ${COLORS.blue})`,
             color: COLORS.onAccent,
             border: "none",
-            borderRadius: 16,
+            borderRadius: 14,
             padding: "13px 16px",
             fontSize: 15,
             fontWeight: 700,
             fontFamily: FONT_SANS,
-            letterSpacing: "0.02em",
-            boxShadow: `0 8px 24px ${COLORS.fuchsia}33`,
+            letterSpacing: "0.01em",
+            boxShadow: `0 6px 18px ${COLORS.blue}2e`,
             opacity: ((!principalId && !plcId) || sucursalFalta) ? 0.4 : 1,
             cursor: ((!principalId && !plcId) || sucursalFalta) ? "not-allowed" : "pointer",
           }}
@@ -720,7 +705,7 @@ function AddProductForm({ onAdd, sucursal, sucursalFalta }) {
 
 function ProductTicket({ product, onChange, onRemove, sucursal }) {
   const COLORS = useContext(ThemeContext);
-  const cardStyle = { backgroundColor: COLORS.cardBg, backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)", border: `1px solid ${COLORS.line}`, borderRadius: 16, padding: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" };
+  const cardStyle = { backgroundColor: COLORS.cardBg, backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: `1px solid ${COLORS.line}`, borderRadius: 16, padding: 16, boxShadow: "0 8px 24px rgba(8,13,21,0.12)" };
 
   if (product.tipo === "combo") {
     const r = calcCombo(product, sucursal);
@@ -813,6 +798,90 @@ function ProductTicket({ product, onChange, onRemove, sucursal }) {
             <ResultLine label="Costo total de línea" value={fmt(r.costoTotal)} bold accent="green" />
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+function ThemeToggleButton() {
+  const COLORS = useContext(ThemeContext);
+  const toggle = useContext(ThemeToggleContext);
+  const isDark = COLORS.name === "dark";
+  return (
+    <button
+      onClick={toggle}
+      aria-label="Cambiar tema"
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        padding: "6px 10px",
+        borderRadius: 999,
+        background: COLORS.inputBg,
+        border: `1px solid ${COLORS.line}`,
+        color: COLORS.inkMuted,
+        fontSize: 10.5,
+        fontFamily: FONT_MONO,
+        fontWeight: 700,
+        cursor: "pointer",
+        textTransform: "uppercase",
+        letterSpacing: "0.04em",
+        flexShrink: 0,
+      }}
+    >
+      {isDark ? <Sun size={12} /> : <Moon size={12} />}
+      {isDark ? "Claro" : "Oscuro"}
+    </button>
+  );
+}
+
+/* ---------------------------------------------------------------------
+   Encabezado tipo membrete: espacio para logo a la izquierda, nombre
+   del sistema y folio/fecha a la derecha — como el encabezado de una
+   factura formal.
+--------------------------------------------------------------------- */
+function InvoiceHeader({ folio, today }) {
+  const COLORS = useContext(ThemeContext);
+  return (
+    <div style={{ backgroundColor: COLORS.cardSolid, border: `1px solid ${COLORS.line}`, borderRadius: 16, padding: 16, display: "flex", alignItems: "center", gap: 14, boxShadow: "0 8px 24px rgba(8,13,21,0.14)" }}>
+      <div
+        style={{
+          width: 60,
+          height: 60,
+          borderRadius: 10,
+          background: COLORS.logoBoxBg,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+          border: `1px solid ${COLORS.line}`,
+          overflow: "hidden",
+        }}
+      >
+        <img
+          src={LOGO_URL}
+          alt="Logo"
+          style={{ width: "100%", height: "100%", objectFit: "contain", padding: 6, boxSizing: "border-box" }}
+          onError={(e) => {
+            e.currentTarget.style.display = "none";
+            e.currentTarget.nextSibling.style.display = "flex";
+          }}
+        />
+        <div style={{ display: "none", flexDirection: "column", alignItems: "center", gap: 2, color: COLORS.logoBoxText }}>
+          <Building2 size={14} />
+          <span style={{ fontSize: 6, fontFamily: FONT_MONO, letterSpacing: "0.04em", textAlign: "center", lineHeight: 1.2 }}>
+            ESPACIO<br />PARA LOGO
+          </span>
+        </div>
+      </div>
+
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <ThemeToggleButton />
+          <span style={{ fontSize: 19, fontWeight: 800, letterSpacing: "0.08em", color: COLORS.ink, fontFamily: FONT_SANS }}>COTIZADOR</span>
+        </div>
+        <span style={{ fontSize: 11, color: COLORS.inkMuted, fontFamily: FONT_MONO }}>FOLIO N.º {folio}</span>
+        <span style={{ fontSize: 11, color: COLORS.inkMuted, fontFamily: FONT_MONO }}>{today}</span>
       </div>
     </div>
   );
@@ -931,16 +1000,11 @@ function CotizadorInner() {
 
   const totalCotizar = totals.costo + totals.distribucion;
 
-  // Desglose para la mini-gráfica de composición del total (costo vs.
-  // distribución vs. bonificación entregada como cortesía).
-  const composicion = useMemo(() => {
-    const base = Math.max(totals.costo, 1);
-    return [
-      { label: "Costo de línea", value: totals.costo, color: COLORS.cyan },
-      { label: "Distribución", value: totals.distribucion, color: COLORS.red },
-      { label: "Bonificación PLC (cortesía)", value: totals.bonificacion, color: COLORS.gold },
-    ];
-  }, [totals, COLORS]);
+  const composicion = useMemo(() => ([
+    { label: "Costo de línea", value: totals.costo, color: COLORS.cyan },
+    { label: "Distribución", value: totals.distribucion, color: COLORS.gold },
+    { label: "Bonificación PLC (cortesía)", value: totals.bonificacion, color: COLORS.purple },
+  ]), [totals, COLORS]);
   const composicionMax = Math.max(1, ...composicion.map((c) => c.value));
 
   const escapeHtml = (s) =>
@@ -955,12 +1019,12 @@ function CotizadorInner() {
             <td style="text-align:right">${escapeHtml(cantidadTextoSimple(p.principal))}</td>
           </tr>
           <tr>
-            <td style="padding-left:16px;color:#B45309">↳ PLC: ${escapeHtml(p.plc.nombre)}</td>
+            <td style="padding-left:16px;color:#B3792E">↳ PLC: ${escapeHtml(p.plc.nombre)}</td>
             <td style="text-align:right">${escapeHtml(cantidadTextoSimple(p.plc))}</td>
           </tr>`;
         }
         return `<tr>
-          <td>${escapeHtml(p.nombre)}${p.tipo === "plc" ? ' <span style="color:#B45309">(PLC)</span>' : ""}</td>
+          <td>${escapeHtml(p.nombre)}${p.tipo === "plc" ? ' <span style="color:#B3792E">(PLC)</span>' : ""}</td>
           <td style="text-align:right">${escapeHtml(cantidadTextoSimple(p))}</td>
         </tr>`;
       })
@@ -972,20 +1036,26 @@ function CotizadorInner() {
   <meta charset="UTF-8" />
   <title>Cotización ${folio}</title>
   <style>
-    body { font-family: -apple-system, system-ui, sans-serif; background:#F3F6FB; padding:24px; color:#111827; }
-    .ticket { max-width:420px; margin:0 auto; background:#FFFFFF; padding:24px; border-radius:16px; border:1px solid rgba(17,24,39,0.10); box-shadow:0 20px 50px rgba(17,24,39,0.12); }
-    h1 { text-align:center; font-size:20px; margin:0 0 8px; background:linear-gradient(135deg,#0891B2,#C026D3); color:#fff; padding:12px; border-radius:12px; letter-spacing:0.08em; }
-    .sub { text-align:center; font-size:12px; color:#5B6577; margin-bottom:12px; }
-    .meta { display:flex; justify-content:space-between; font-size:12px; color:#5B6577; border-top:1px solid rgba(17,24,39,0.10); padding-top:8px; margin-top:8px; font-family:'JetBrains Mono',ui-monospace,monospace; }
+    body { font-family: -apple-system, system-ui, sans-serif; background:#F1F4F9; padding:24px; color:#141B29; }
+    .ticket { max-width:420px; margin:0 auto; background:#FFFFFF; padding:24px; border-radius:16px; border:1px solid rgba(20,27,41,0.10); box-shadow:0 20px 50px rgba(20,27,41,0.10); }
+    .letterhead { display:flex; align-items:center; gap:14px; margin-bottom:16px; }
+    .logo-box { width:52px; height:52px; border-radius:10px; border:1px solid rgba(20,27,41,0.14); display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0; }
+    .logo-box img { width:100%; height:100%; object-fit:contain; padding:5px; box-sizing:border-box; }
+    h1 { text-align:right; flex:1; font-size:19px; margin:0; letter-spacing:0.06em; color:#141B29; }
+    .sub { text-align:center; font-size:12px; color:#5C6779; margin-bottom:12px; }
+    .meta { display:flex; justify-content:space-between; font-size:12px; color:#5C6779; border-top:1px solid rgba(20,27,41,0.10); padding-top:8px; margin-top:8px; font-family:'JetBrains Mono',ui-monospace,monospace; }
     table { width:100%; border-collapse:collapse; margin-top:16px; font-size:13px; }
     td { padding:5px 0; }
-    .totales td { border-top:1px solid rgba(17,24,39,0.10); padding-top:8px; color:#E11D48; font-weight:600; }
-    .total-final td { font-weight:800; font-size:16px; color:#059669; border-top:1px solid rgba(17,24,39,0.10); padding-top:8px; }
+    .totales td { border-top:1px solid rgba(20,27,41,0.10); padding-top:8px; color:#B85662; font-weight:600; }
+    .total-final td { font-weight:800; font-size:16px; color:#2E9A6C; border-top:1px solid rgba(20,27,41,0.10); padding-top:8px; }
   </style>
 </head>
 <body>
   <div class="ticket">
-    <h1>COTIZADOR</h1>
+    <div class="letterhead">
+      <div class="logo-box"><img src="${LOGO_URL}" alt="Logo" /></div>
+      <h1>COTIZADOR</h1>
+    </div>
     <p class="sub">Resumen de cotización</p>
     <div class="meta"><span>Folio N.º ${folio}</span><span>${escapeHtml(today)}</span></div>
     ${sucursal ? `<div class="meta"><span>Clo</span><span>${escapeHtml(sucursal)}</span></div>` : ""}
@@ -1018,7 +1088,7 @@ function CotizadorInner() {
     setTimeout(() => setStatus(""), 4000);
   };
 
-  const cardBase = { backgroundColor: COLORS.cardBg, backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)", border: `1px solid ${COLORS.line}`, borderRadius: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" };
+  const cardBase = { backgroundColor: COLORS.cardBg, backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: `1px solid ${COLORS.line}`, borderRadius: 16, boxShadow: "0 8px 24px rgba(8,13,21,0.12)" };
   const ghostBtn = { display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 12px", borderRadius: 12, backgroundColor: COLORS.inputBg, border: `1px solid ${COLORS.line}`, fontSize: 13, color: COLORS.ink, fontFamily: FONT_SANS, cursor: "pointer", transition: "border-color .15s ease, color .15s ease" };
 
   return (
@@ -1026,53 +1096,25 @@ function CotizadorInner() {
       style={{
         minHeight: "100vh",
         width: "100%",
-        position: "relative",
         display: "flex",
         justifyContent: "center",
         padding: "24px 12px",
         backgroundColor: COLORS.pageBg,
-        backgroundImage: `radial-gradient(circle at 50% 0%, ${COLORS.cyan}0d, transparent 55%)`,
         fontFamily: FONT_SANS,
-        overflow: "hidden",
       }}
     >
       <GlobalStyle />
 
-      {/* Orbes de luz ambiental */}
-      <div className="ct-orb-a" style={{ position: "fixed", top: "-10%", left: "-10%", width: 340, height: 340, borderRadius: "50%", background: `radial-gradient(circle, ${COLORS.cyan}26, transparent 70%)`, filter: "blur(10px)", pointerEvents: "none", zIndex: 0 }} />
-      <div className="ct-orb-b" style={{ position: "fixed", bottom: "-14%", right: "-10%", width: 380, height: 380, borderRadius: "50%", background: `radial-gradient(circle, ${COLORS.fuchsia}22, transparent 70%)`, filter: "blur(10px)", pointerEvents: "none", zIndex: 0 }} />
+      <div style={{ width: "100%", maxWidth: 420, display: "flex", flexDirection: "column", gap: 16 }}>
 
-      <ThemeToggleWrapper />
-
-      <div style={{ width: "100%", maxWidth: 420, display: "flex", flexDirection: "column", gap: 16, position: "relative", zIndex: 1 }}>
+        <InvoiceHeader folio={folio} today={today} />
 
         <div>
           <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.08em", color: COLORS.inkMuted, marginBottom: 4 }}>
-            Clo <span style={{ color: COLORS.red }}>*</span>
+            Clo <span style={{ color: COLORS.gold }}>*</span>
           </div>
           <div style={{ maxWidth: 220 }}>
             <SearchableSelect value={sucursal} onChange={setSucursal} options={sucursalOptions} placeholder="Selecciona un Clo" required accent={COLORS.cyan} />
-          </div>
-        </div>
-
-        <div style={{ textAlign: "center", padding: "16px 0", position: "relative" }}>
-          <div
-            style={{
-              fontSize: 26,
-              fontWeight: 800,
-              letterSpacing: "0.14em",
-              backgroundImage: `linear-gradient(135deg, ${COLORS.cyan}, ${COLORS.fuchsia})`,
-              WebkitBackgroundClip: "text",
-              backgroundClip: "text",
-              color: "transparent",
-              filter: `drop-shadow(0 0 14px ${COLORS.cyan}44)`,
-            }}
-          >
-            COTIZADOR
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12, paddingTop: 8, borderTop: `1px solid ${COLORS.line}`, fontSize: 11, color: COLORS.inkMuted, fontFamily: FONT_MONO }}>
-            <span>FOLIO N.º {folio}<span className="ct-cursor" style={{ color: COLORS.cyan }}>_</span></span>
-            <span>{today}</span>
           </div>
         </div>
 
@@ -1083,13 +1125,13 @@ function CotizadorInner() {
           <button className="ct-btn-ghost" onClick={() => setShowSavedList(s => !s)} style={ghostBtn}>
             <FolderOpen size={16} /> Guardadas
           </button>
-          <button className="ct-btn-ghost" onClick={resetQuote} style={{ ...ghostBtn, color: COLORS.red }}>
+          <button className="ct-btn-ghost" onClick={resetQuote} style={{ ...ghostBtn, color: COLORS.inkMuted }}>
             <RotateCcw size={16} />
           </button>
         </div>
 
         {status && (
-          <div style={{ textAlign: "center", fontSize: 12, padding: 8, borderRadius: 12, backgroundColor: `${COLORS.green}14`, border: `1px solid ${COLORS.green}33`, color: COLORS.green, fontFamily: FONT_MONO }}>
+          <div style={{ textAlign: "center", fontSize: 12, padding: 8, borderRadius: 12, backgroundColor: `${COLORS.green}12`, border: `1px solid ${COLORS.green}30`, color: COLORS.green, fontFamily: FONT_MONO }}>
             {status}
           </div>
         )}
@@ -1171,7 +1213,6 @@ function CotizadorInner() {
               </div>
             </div>
 
-            {/* Mini-gráfica de composición: costo vs. distribución vs. bonificación */}
             <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${COLORS.line}` }}>
               <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: "0.06em", color: COLORS.inkMuted, marginBottom: 8, fontFamily: FONT_MONO }}>
                 Composición del total
@@ -1230,7 +1271,7 @@ function CotizadorInner() {
                   fontWeight: 700,
                   color: COLORS.onAccent,
                   fontFamily: FONT_SANS,
-                  boxShadow: `0 8px 24px ${COLORS.cyan}33`,
+                  boxShadow: `0 6px 18px ${COLORS.cyan}2e`,
                   cursor: "pointer",
                 }}
               >
@@ -1240,13 +1281,13 @@ function CotizadorInner() {
           </div>
         )}
 
-        <div style={{ textAlign: "center", fontSize: 11, color: COLORS.inkMuted, marginTop: 8, lineHeight: 1.4, fontFamily: FONT_MONO }}>
-          NO OLVIDES OFRECER A TODOS TUS CLIENTES MARCAS ESTRATÉGICAS COMO LA FAMILIA MIX, FAMILIA BARONET Y LA NUEVA FAMILIA FARITOS PARA COMPLEMENTAR SU PEDIDO
+        <div style={{ textAlign: "center", fontSize: 10.5, color: COLORS.inkMuted, marginTop: 8, lineHeight: 1.5, fontFamily: FONT_SANS }}>
+          No olvides ofrecer a todos tus clientes marcas estratégicas como la familia Mix, familia Baronet y la nueva familia Faritos para complementar su pedido.
         </div>
       </div>
 
       {showCapture && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 50, backgroundColor: COLORS.pageBg, backgroundImage: `radial-gradient(circle at 50% 0%, ${COLORS.cyan}0f, transparent 55%)`, overflowY: "auto", padding: "24px 12px" }}>
+        <div style={{ position: "fixed", inset: 0, zIndex: 50, backgroundColor: COLORS.pageBg, overflowY: "auto", padding: "24px 12px" }}>
           <div style={{ maxWidth: 420, margin: "0 auto" }}>
             <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
               <button
@@ -1269,11 +1310,24 @@ function CotizadorInner() {
               </button>
             </div>
 
-            <div style={{ ...cardBase, padding: 20, position: "relative", overflow: "hidden" }}>
-              <div className="ct-scanline" style={{ position: "absolute", left: 0, right: 0, height: 2, background: `linear-gradient(90deg, transparent, ${COLORS.cyan}, transparent)`, pointerEvents: "none" }} />
-
-              <div style={{ background: `linear-gradient(135deg, ${COLORS.cyan}, ${COLORS.fuchsia})`, borderRadius: 12, padding: "12px 0", marginBottom: 16 }}>
-                <div style={{ textAlign: "center", color: COLORS.onAccent, fontSize: 18, fontWeight: 800, letterSpacing: "0.1em" }}>
+            <div style={{ ...cardBase, padding: 20 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+                <div style={{ width: 48, height: 48, borderRadius: 10, background: COLORS.logoBoxBg, border: `1px solid ${COLORS.line}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" }}>
+                  <img
+                    src={LOGO_URL}
+                    alt="Logo"
+                    style={{ width: "100%", height: "100%", objectFit: "contain", padding: 5, boxSizing: "border-box" }}
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                      e.currentTarget.nextSibling.style.display = "flex";
+                    }}
+                  />
+                  <div style={{ display: "none", flexDirection: "column", alignItems: "center", gap: 1, color: COLORS.logoBoxText }}>
+                    <Building2 size={12} />
+                    <span style={{ fontSize: 5.5, fontFamily: FONT_MONO, textAlign: "center", lineHeight: 1.1 }}>ESPACIO<br />LOGO</span>
+                  </div>
+                </div>
+                <div style={{ flex: 1, textAlign: "right", fontSize: 18, fontWeight: 800, letterSpacing: "0.08em", color: COLORS.ink }}>
                   COTIZADOR
                 </div>
               </div>
@@ -1326,46 +1380,6 @@ function CotizadorInner() {
         </div>
       )}
     </div>
-  );
-}
-
-// Botón de tema: vive dentro del ThemeContext.Provider pero necesita
-// disparar el cambio de tema que vive un nivel arriba (en Cotizador).
-const ThemeToggleContext = createContext(() => {});
-function ThemeToggleWrapper() {
-  const COLORS = useContext(ThemeContext);
-  const toggle = useContext(ThemeToggleContext);
-  const isDark = COLORS.name === "dark";
-  return (
-    <button
-      onClick={toggle}
-      aria-label="Cambiar tema"
-      style={{
-        position: "absolute",
-        top: 16,
-        right: 16,
-        zIndex: 5,
-        display: "flex",
-        alignItems: "center",
-        gap: 6,
-        padding: "7px 11px",
-        borderRadius: 999,
-        background: COLORS.cardBg,
-        backdropFilter: "blur(10px)",
-        WebkitBackdropFilter: "blur(10px)",
-        border: `1px solid ${COLORS.line}`,
-        color: isDark ? COLORS.gold : COLORS.cyan,
-        fontSize: 11,
-        fontFamily: FONT_MONO,
-        fontWeight: 700,
-        cursor: "pointer",
-        textTransform: "uppercase",
-        letterSpacing: "0.04em",
-      }}
-    >
-      {isDark ? <Sun size={13} /> : <Moon size={13} />}
-      {isDark ? "Claro" : "Oscuro"}
-    </button>
   );
 }
 
