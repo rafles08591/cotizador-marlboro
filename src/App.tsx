@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React, { useState, useEffect, useRef, useMemo, useContext, createContext } from "react";
-import { Trash2, Save, RotateCcw, FolderOpen, X, Check, PlusCircle, Download, Camera, Search, ChevronDown, Sun, Moon, Building2 } from "lucide-react";
+import { Trash2, Save, RotateCcw, FolderOpen, X, Check, PlusCircle, Download, Camera, Search, ChevronDown, Sun, Moon, Building2, Users, Percent, ListFilter } from "lucide-react";
 
 /* =====================================================================
    COTIZADOR — recibo corporativo JMD
@@ -142,7 +142,14 @@ const COSTOS_DISTRIBUCION = {
 
 const costoDistribucionPorClo = (sucursal) => COSTOS_DISTRIBUCION[normalizeClo(sucursal)] || 0;
 
-const CATALOGO = [
+/* IVA: los precios de catálogo (ambas listas) se manejan SIN IVA. El
+   desglose de IVA es una opción de despliegue/cálculo del total, no
+   altera los precios base guardados en cada línea de producto. */
+const IVA_RATE = 0.16;
+const precioConIva = (precio) => (Number(precio) || 0) * (1 + IVA_RATE);
+
+/* Lista de precios "Clásica" — la de siempre, activa por default. */
+const CATALOGO_CLASICA = [
   { id: "c01", nombre: "MARLBORO RED 20s CD", cajetillas: 10, precio: 973.39 },
   { id: "c02", nombre: "MARLBORO GOLD 20s CD", cajetillas: 10, precio: 973.39 },
   { id: "c03", nombre: "MARLBORO RED 20s CS", cajetillas: 10, precio: 889.96 },
@@ -191,7 +198,60 @@ const CATALOGO = [
   { id: "c46", nombre: "MARLBORO CARIBEAN 20 CD", cajetillas: 10, precio: 862.33 },
 ];
 
-const findCatalogo = (id) => CATALOGO.find((c) => c.id === id);
+/* Lista de precios "Casinos" — se activa manualmente. Precios S/IVA
+   tal cual la tabla proporcionada (UNIDADES P/PAQ = cajetillas por
+   paquete). */
+const CATALOGO_CASINOS = [
+  { id: "cs01", nombre: "MARLBORO LS BOX 20", cajetillas: 10, precio: 847.65 },
+  { id: "cs02", nombre: "MARLBORO LS BOX 14", cajetillas: 10, precio: 621.47 },
+  { id: "cs03", nombre: "MARLBORO RED CAPS 100 BOX 20", cajetillas: 10, precio: 856.62 },
+  { id: "cs04", nombre: "MARLBORO GOLD ORIGINAL (CAPS) 100 BOX 20", cajetillas: 10, precio: 856.62 },
+  { id: "cs05", nombre: "MARLBORO ICE XPRESS MEGA MNT 100 BOX 20", cajetillas: 10, precio: 856.62 },
+  { id: "cs06", nombre: "MARLBORO KS SOF 20", cajetillas: 10, precio: 775 },
+  { id: "cs07", nombre: "MARLBORO KRETEK MINT MNT KS BOX 20", cajetillas: 10, precio: 853.5 },
+  { id: "cs08", nombre: "MARLBORO RUBYFRESH MNT 100 BOX 14", cajetillas: 10, precio: 628.26 },
+  { id: "cs09", nombre: "MARLBORO FUSION SUMMER 100 BOX 20", cajetillas: 10, precio: 794.31 },
+  { id: "cs10", nombre: "MARLBORO RUBY MNT 100 BOX 20", cajetillas: 10, precio: 856.62 },
+  { id: "cs11", nombre: "MARLBORO GOLD 3.0 KS BOX 20", cajetillas: 10, precio: 847.65 },
+  { id: "cs12", nombre: "MARLBORO GOLD (3.0 ORIGINAL) KS RCB 14", cajetillas: 10, precio: 621.47 },
+  { id: "cs13", nombre: "MARLB GOLD 3.0 ORIG KS SOF 20", cajetillas: 10, precio: 775 },
+  { id: "cs14", nombre: "MARLB DFUSI VELVET 100 BOX 20", cajetillas: 10, precio: 856.62 },
+  { id: "cs15", nombre: "MARLBORO GARDEN FUSION MNT 100 BOX 20", cajetillas: 10, precio: 801.86 },
+  { id: "cs16", nombre: "MARLBORO ARCTIC FUSION MNT 100 BOX 20", cajetillas: 10, precio: 801.86 },
+  { id: "cs17", nombre: "MARLBORO BLOSSOM MIST MNT 100 BOX 20", cajetillas: 10, precio: 801.86 },
+  { id: "cs18", nombre: "MLB CRAFTED 25S", cajetillas: 8, precio: 646.47 },
+  { id: "cs19", nombre: "MLB CRAFTED 15S", cajetillas: 8, precio: 437.65 },
+  { id: "cs20", nombre: "MLB CRAFTED RED 20S", cajetillas: 10, precio: 726.53 },
+  { id: "cs21", nombre: "MLB CRAFTED ICE MIX 20S", cajetillas: 10, precio: 616.01 },
+  { id: "cs22", nombre: "MARLBORO CRAFTED BLOSSOM MIX 100 BOX 20", cajetillas: 10, precio: 616.01 },
+  { id: "cs23", nombre: "MARLBORO CRAFTED SUMMER MIX 100 BOX 20", cajetillas: 10, precio: 616.01 },
+  { id: "cs24", nombre: "MARLBORO CARIBBEAN FUSION MNT 100 BOX 20", cajetillas: 10, precio: 801.86 },
+  { id: "cs25", nombre: "DELICADOS OVALADOS NF RS SOF 18P10", cajetillas: 10, precio: 708.5 },
+  { id: "cs26", nombre: "BENSON HEDGES MENTHOL PEARL 100 BOX 20", cajetillas: 10, precio: 869.6 },
+  { id: "cs27", nombre: "BENSON HEDGES PEARL CAPSULE 100 BOX 20", cajetillas: 10, precio: 869.6 },
+  { id: "cs28", nombre: "BENSON & HEDGES GOLD PEARL MNT 100 BOX 20", cajetillas: 10, precio: 869.6 },
+  { id: "cs29", nombre: "BENSON HEDGES CRYSTAL VIOLET BOX 20", cajetillas: 10, precio: 814.18 },
+  { id: "cs30", nombre: "BENSON & HEDGES CRYSTAL BLUE BOX 20", cajetillas: 10, precio: 814.18 },
+  { id: "cs31", nombre: "BENSON & HEDGES GOLD 100 RCB 20", cajetillas: 10, precio: 869.6 },
+  { id: "cs32", nombre: "FAROS LS BOX 14", cajetillas: 10, precio: 417.18 },
+  { id: "cs33", nombre: "FAROS LS BOX 20", cajetillas: 10, precio: 588.86 },
+  { id: "cs34", nombre: "FAROS KS BOB 25", cajetillas: 8, precio: 536.59 },
+  { id: "cs35", nombre: "FARITOS KS BOB 25", cajetillas: 8, precio: 423.66 },
+  { id: "cs36", nombre: "FARITOS KS BOX 20", cajetillas: 10, precio: 457.35 },
+  { id: "cs37", nombre: "MARLBORO CRAFTED RUBY MIX MNT 100 BOX 20", cajetillas: 10, precio: 616.01 },
+  { id: "cs38", nombre: "L&M RED LABEL KS BOB 25", cajetillas: 8, precio: 569.31 },
+  { id: "cs39", nombre: "L&M RED KS BOX 20", cajetillas: 10, precio: 625.24 },
+  { id: "cs40", nombre: "L&M RED LABEL LS BOX 14", cajetillas: 10, precio: 441.88 },
+  { id: "cs41", nombre: "BARONET KS BOB 25", cajetillas: 8, precio: 423.66 },
+  { id: "cs42", nombre: "BARONET KS BOX 20", cajetillas: 10, precio: 457.35 },
+];
+
+const LISTAS_PRECIO = {
+  clasica: { label: "Clásica", catalogo: CATALOGO_CLASICA },
+  casinos: { label: "Casinos", catalogo: CATALOGO_CASINOS },
+};
+
+const findCatalogo = (id, catalogo) => (catalogo || CATALOGO_CLASICA).find((c) => c.id === id);
 const costoPorCajetilla = (cajetillasPorPaquete, precioPaquete) =>
   cajetillasPorPaquete > 0 ? precioPaquete / cajetillasPorPaquete : 0;
 
@@ -263,17 +323,27 @@ const MARCAS = [
 ];
 const marcaDe = (nombre) => MARCAS.find((m) => nombre.startsWith(m.key)) || { key: "OTRO", label: "Otro", color: "#8793A6" };
 
-const catalogoOptions = CATALOGO.map((c) => {
-  const marca = marcaDe(c.nombre);
-  return {
-    value: c.id,
-    label: c.nombre,
-    meta: fmt(c.precio),
-    dotColor: marca.color,
-    marcaLabel: marca.label,
-  };
-});
+const buildCatalogoOptions = (catalogo) =>
+  catalogo.map((c) => {
+    const marca = marcaDe(c.nombre);
+    return {
+      value: c.id,
+      label: c.nombre,
+      meta: fmt(c.precio),
+      dotColor: marca.color,
+      marcaLabel: marca.label,
+    };
+  });
 const sucursalOptions = SUCURSALES.map((s) => ({ value: s, label: s }));
+
+/* Texto de precio por paquete: si el desglose de IVA está activo,
+   muestra sin IVA y con IVA lado a lado; si no, un solo precio (como
+   antes). */
+function precioPorPaqueteTexto(precio, ivaOn) {
+  if (!precio) return null;
+  if (ivaOn) return `${fmt(precio)} s/IVA · ${fmt(precioConIva(precio))} c/IVA`;
+  return `${fmt(precio)}/paq`;
+}
 
 /* ---------------------------------------------------------------------
    Estilos globales compartidos (foco accesible, scrollbar)
@@ -533,6 +603,98 @@ function NumField({ label, value, onChange }) {
   );
 }
 
+function TextField({ label, value, onChange, placeholder }) {
+  const COLORS = useContext(ThemeContext);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, width: "100%" }}>
+      <span style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", color: COLORS.inkMuted, fontFamily: FONT_SANS }}>
+        {label}
+      </span>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="ct-input"
+        style={{
+          width: "100%",
+          boxSizing: "border-box",
+          borderRadius: 12,
+          padding: "10px 12px",
+          fontSize: 14,
+          backgroundColor: COLORS.inputBg,
+          color: COLORS.ink,
+          border: `1px solid ${COLORS.line}`,
+          fontFamily: FONT_SANS,
+          outline: "none",
+        }}
+      />
+    </div>
+  );
+}
+
+/* Segmentado Clásica / Casinos — cambia qué catálogo alimenta el
+   buscador de productos. No modifica productos ya agregados a la
+   cotización (esos guardan su propio precio al momento de agregarlos). */
+function ListaPrecioToggle({ value, onChange }) {
+  const COLORS = useContext(ThemeContext);
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px", borderRadius: 999, background: COLORS.inputBg, border: `1px solid ${COLORS.line}` }}>
+      <ListFilter size={12} color={COLORS.inkMuted} style={{ marginLeft: 6, flexShrink: 0 }} />
+      {Object.entries(LISTAS_PRECIO).map(([key, cfg]) => {
+        const active = value === key;
+        return (
+          <button
+            key={key}
+            onClick={() => onChange(key)}
+            style={{
+              padding: "5px 12px",
+              borderRadius: 999,
+              border: "none",
+              cursor: "pointer",
+              fontSize: 11.5,
+              fontWeight: 700,
+              fontFamily: FONT_SANS,
+              background: active ? COLORS.cyan : "transparent",
+              color: active ? COLORS.onAccent : COLORS.inkMuted,
+              transition: "background .15s ease, color .15s ease",
+            }}
+          >
+            {cfg.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* Interruptor de desglose de IVA (16%). */
+function IvaToggle({ value, onChange }) {
+  const COLORS = useContext(ThemeContext);
+  return (
+    <button
+      onClick={() => onChange(!value)}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 7,
+        padding: "6px 12px",
+        borderRadius: 999,
+        background: value ? `${COLORS.gold}18` : COLORS.inputBg,
+        border: `1px solid ${value ? COLORS.gold + "55" : COLORS.line}`,
+        color: value ? COLORS.gold : COLORS.inkMuted,
+        fontSize: 11.5,
+        fontWeight: 700,
+        fontFamily: FONT_SANS,
+        cursor: "pointer",
+      }}
+    >
+      <Percent size={12} />
+      IVA {value ? "desglosado" : "sin desglosar"}
+    </button>
+  );
+}
+
 function ResultLine({ label, value, bold, accent }) {
   const COLORS = useContext(ThemeContext);
   return (
@@ -557,7 +719,7 @@ function ResultLine({ label, value, bold, accent }) {
   );
 }
 
-function AddProductForm({ onAdd, sucursal, sucursalFalta }) {
+function AddProductForm({ onAdd, sucursal, sucursalFalta, catalogo, catalogoOptions, ivaOn }) {
   const COLORS = useContext(ThemeContext);
   const [principalId, setPrincipalId] = useState("");
   const [paquetesPrincipal, setPaquetesPrincipal] = useState(1);
@@ -566,8 +728,8 @@ function AddProductForm({ onAdd, sucursal, sucursalFalta }) {
   const [paquetesPlc, setPaquetesPlc] = useState(0);
   const [cajetillasPlc, setCajetillasPlc] = useState(0);
 
-  const principal = findCatalogo(principalId);
-  const plc = findCatalogo(plcId);
+  const principal = findCatalogo(principalId, catalogo);
+  const plc = findCatalogo(plcId, catalogo);
   const costoCajetillaPrincipal = principal ? costoPorCajetilla(principal.cajetillas, principal.precio) : 0;
   const tarifaDistribucion = costoDistribucionPorClo(sucursal);
 
@@ -637,9 +799,14 @@ function AddProductForm({ onAdd, sucursal, sucursalFalta }) {
           <div style={{ fontSize: 15, fontWeight: 600, color: COLORS.ink, fontFamily: FONT_SANS }}>Producto principal</div>
           <SearchableSelect label="Producto" value={principalId} onChange={setPrincipalId} options={catalogoOptions} placeholder="Busca un producto…" accent={COLORS.cyan} />
           {principal && (
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "8px 12px", borderRadius: 12, backgroundColor: `${COLORS.cyan}12`, border: `1px solid ${COLORS.cyan}30`, color: COLORS.inkMuted, fontFamily: FONT_MONO }}>
-              <span>Cajetillas x paquete: {principal.cajetillas}</span>
-              <span>{fmt(principal.precio)}/paq · {fmt(costoCajetillaPrincipal)}/caj</span>
+            <div style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 12, padding: "8px 12px", borderRadius: 12, backgroundColor: `${COLORS.cyan}12`, border: `1px solid ${COLORS.cyan}30`, color: COLORS.inkMuted, fontFamily: FONT_MONO }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span>Cajetillas x paquete: {principal.cajetillas}</span>
+                <span>{fmt(costoCajetillaPrincipal)}/caj</span>
+              </div>
+              <div style={{ textAlign: "right", color: COLORS.ink, fontWeight: 600 }}>
+                {precioPorPaqueteTexto(principal.precio, ivaOn)}
+              </div>
             </div>
           )}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
@@ -653,6 +820,11 @@ function AddProductForm({ onAdd, sucursal, sucursalFalta }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <div style={{ fontSize: 15, fontWeight: 600, color: COLORS.gold, fontFamily: FONT_SANS }}>Producto PLC (cortesía, sin costo)</div>
           <SearchableSelect label="Producto PLC" value={plcId} onChange={setPlcId} options={catalogoOptions} placeholder="Ninguno" accent={COLORS.gold} />
+          {plcId && (
+            <div style={{ fontSize: 11, color: COLORS.inkMuted, fontFamily: FONT_MONO }}>
+              Precio de lista: {precioPorPaqueteTexto(plc?.precio, ivaOn)}
+            </div>
+          )}
           {plc && (
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "8px 12px", borderRadius: 12, backgroundColor: `${COLORS.gold}12`, border: `1px solid ${COLORS.gold}30`, color: COLORS.inkMuted, fontFamily: FONT_MONO }}>
               <span>Cajetillas x paquete: {plc.cajetillas}</span>
@@ -708,7 +880,7 @@ function AddProductForm({ onAdd, sucursal, sucursalFalta }) {
   );
 }
 
-function ProductTicket({ product, onChange, onRemove, sucursal }) {
+function ProductTicket({ product, onChange, onRemove, sucursal, ivaOn }) {
   const COLORS = useContext(ThemeContext);
   const cardStyle = { backgroundColor: COLORS.cardBg, backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: `1px solid ${COLORS.line}`, borderRadius: 16, padding: 16, boxShadow: "0 8px 24px rgba(8,13,21,0.12)" };
 
@@ -737,9 +909,15 @@ function ProductTicket({ product, onChange, onRemove, sucursal }) {
           <NumField label="Cajetillas" value={product.principal.cantidadCajetillas} onChange={(v) => updatePrincipal("cantidadCajetillas", v)} />
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
-          <span style={{ fontSize: 13, color: COLORS.inkMuted }}>Costo</span>
+          <span style={{ fontSize: 13, color: COLORS.inkMuted }}>Costo{ivaOn ? " (s/IVA)" : ""}</span>
           <span style={{ fontSize: 13, fontWeight: 600, color: COLORS.green }}>{fmt(r.costoLinea)}</span>
         </div>
+        {ivaOn && (
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 2 }}>
+            <span style={{ fontSize: 12, color: COLORS.inkMuted }}>Costo (c/IVA)</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: COLORS.inkMuted }}>{fmt(precioConIva(r.costoLinea))}</span>
+          </div>
+        )}
 
         <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.gold, marginTop: 18, marginBottom: 8 }}>
           Producto PLC — {product.plc.nombre}
@@ -758,6 +936,9 @@ function ProductTicket({ product, onChange, onRemove, sucursal }) {
           <ResultLine label="Bonificación (PLC)" value={fmt(r.bonificacion)} />
           <div style={{ borderTop: `1px solid ${COLORS.line}`, marginTop: 6, paddingTop: 6 }}>
             <ResultLine label="Precio descontando PLC" value={fmt(r.costoPorPaqueteConPlc)} bold accent="green" />
+            {ivaOn && (
+              <ResultLine label="Precio descontando PLC (c/IVA)" value={fmt(precioConIva(r.costoPorPaqueteConPlc))} />
+            )}
             <ResultLine label="Margen de ganancia" value={`${r.margenGanancia.toFixed(2)}%`} bold />
           </div>
         </div>
@@ -799,10 +980,94 @@ function ProductTicket({ product, onChange, onRemove, sucursal }) {
         ) : (
           <>
             <ResultLine label="Costo x paquete (lista)" value={fmt(product.precioPaquete)} />
+            {ivaOn && (
+              <ResultLine label="Costo x paquete (c/IVA)" value={fmt(precioConIva(product.precioPaquete))} />
+            )}
             <ResultLine label="Costo total de línea" value={fmt(r.costoTotal)} bold accent="green" />
+            {ivaOn && (
+              <ResultLine label="Costo total de línea (c/IVA)" value={fmt(precioConIva(r.costoTotal))} />
+            )}
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+/* Línea de producto dentro del resumen final — nombre, cantidad y,
+   cuando el producto tiene precio (no aplica a PLC cortesía), el
+   precio por paquete con/sin IVA según la configuración. */
+function ResumenLineaProducto({ p, ivaOn }) {
+  const COLORS = useContext(ThemeContext);
+  const precioBase = p.tipo === "combo" ? p.principal.precioPaquete : p.tipo === "plc" ? null : p.precioPaquete;
+  const texto = precioBase ? precioPorPaqueteTexto(precioBase, ivaOn) : null;
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: COLORS.ink }}>
+        <span>{p.tipo === "combo" ? p.principal.nombre : p.nombre}{p.tipo === "plc" && <span style={{ color: COLORS.gold }}> (PLC)</span>}</span>
+        <span style={{ color: COLORS.inkMuted }}>{p.tipo === "combo" ? cantidadTextoSimple(p.principal) : cantidadTextoSimple(p)}</span>
+      </div>
+      {texto && <div style={{ fontSize: 11, color: COLORS.inkMuted, marginTop: 1 }}>{texto}</div>}
+      {p.tipo === "combo" && (
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, paddingLeft: 12, color: COLORS.gold, marginTop: 2 }}>
+          <span>↳ PLC: {p.plc.nombre}</span>
+          <span style={{ color: COLORS.inkMuted }}>{cantidadTextoSimple(p.plc)}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* Totales del resumen final — cada línea (PLC entregado, bonificación,
+   distribución) solo aparece si aplica (valor > 0), y el desglose de
+   IVA solo si está activado. */
+function ResumenTotales({ totals, totalCotizar, ivaOn, ivaMonto, totalConIva }) {
+  const COLORS = useContext(ThemeContext);
+  return (
+    <>
+      {totals.paquetesPlc > 0 && <ResultLine label="Paquetes PLC entregados" value={totals.paquetesPlc.toFixed(2)} />}
+      {totals.bonificacion > 0 && <ResultLine label="Bonificación total" value={fmt(totals.bonificacion)} />}
+      {totals.distribucion > 0 && <ResultLine label="Desglose de distribución" value={fmt(totals.distribucion)} />}
+      {ivaOn && (
+        <>
+          <ResultLine label="Subtotal (S/IVA)" value={fmt(totalCotizar)} />
+          <ResultLine label="IVA (16%)" value={fmt(ivaMonto)} />
+        </>
+      )}
+      <div style={{ borderTop: `1px solid ${COLORS.line}`, marginTop: 6, paddingTop: 6 }}>
+        <ResultLine label={`TOTAL A COTIZAR${ivaOn ? " (C/IVA)" : ""}`} value={fmt(ivaOn ? totalConIva : totalCotizar)} bold accent="green" />
+      </div>
+    </>
+  );
+}
+
+/* Clo + datos del cliente (si se capturaron) arriba del listado de
+   productos en el resumen final. */
+function ClienteCloInfo({ sucursal, cliente }) {
+  const COLORS = useContext(ThemeContext);
+  const nombre = (cliente?.nombre || "").trim();
+  const negocio = (cliente?.negocio || "").trim();
+  if (!sucursal && !nombre && !negocio) return null;
+  return (
+    <div style={{ marginBottom: 14, display: "flex", flexDirection: "column", gap: 4 }}>
+      {sucursal && (
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+          <span style={{ color: COLORS.inkMuted }}>Clo</span>
+          <span style={{ fontWeight: 600, color: COLORS.ink }}>{sucursal}</span>
+        </div>
+      )}
+      {nombre && (
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+          <span style={{ color: COLORS.inkMuted }}>Cliente</span>
+          <span style={{ fontWeight: 600, color: COLORS.ink }}>{nombre}</span>
+        </div>
+      )}
+      {negocio && (
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+          <span style={{ color: COLORS.inkMuted }}>Negocio</span>
+          <span style={{ fontWeight: 600, color: COLORS.ink }}>{negocio}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -899,9 +1164,24 @@ function CotizadorInner() {
   const [showCapture, setShowCapture] = useState(false);
   const [quoteName, setQuoteName] = useState("");
   const [status, setStatus] = useState("");
+
+  // Datos del cliente al que va dirigida la cotización — siempre
+  // opcionales, capturados a mano (no hay base de clientes conectada
+  // a este cotizador standalone).
+  const [cliente, setCliente] = useState({ nombre: "", negocio: "" });
+  const [showClienteForm, setShowClienteForm] = useState(false);
+
+  // Lista de precios activa: "clasica" (default) o "casinos".
+  const [listaPrecio, setListaPrecio] = useState("clasica");
+  // Desglose de IVA (16%) activado/desactivado.
+  const [ivaOn, setIvaOn] = useState(false);
+
   const saveTimer = useRef(null);
   const folio = useMemo(() => Math.floor(1000 + Math.random() * 9000), []);
   const today = useMemo(() => new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" }), []);
+
+  const catalogoActivo = LISTAS_PRECIO[listaPrecio]?.catalogo || CATALOGO_CLASICA;
+  const catalogoOptionsActivo = useMemo(() => buildCatalogoOptions(catalogoActivo), [catalogoActivo]);
 
   useEffect(() => {
     (async () => {
@@ -909,7 +1189,16 @@ function CotizadorInner() {
         const current = await localStore.get("current-quote");
         if (current?.value) {
           const parsed = JSON.parse(current.value);
-          if (Array.isArray(parsed)) setProducts(parsed);
+          // Compatibilidad con el formato viejo (solo un arreglo de
+          // productos) y el nuevo (objeto con productos + cliente + config).
+          if (Array.isArray(parsed)) {
+            setProducts(parsed);
+          } else if (parsed && typeof parsed === "object") {
+            if (Array.isArray(parsed.products)) setProducts(parsed.products);
+            if (parsed.cliente) setCliente({ nombre: parsed.cliente.nombre || "", negocio: parsed.cliente.negocio || "" });
+            if (parsed.listaPrecio === "clasica" || parsed.listaPrecio === "casinos") setListaPrecio(parsed.listaPrecio);
+            if (typeof parsed.ivaOn === "boolean") setIvaOn(parsed.ivaOn);
+          }
         }
       } catch (e) {}
       try {
@@ -926,11 +1215,11 @@ function CotizadorInner() {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
       try {
-        await localStore.set("current-quote", JSON.stringify(products));
+        await localStore.set("current-quote", JSON.stringify({ products, cliente, listaPrecio, ivaOn }));
       } catch (e) {}
     }, 600);
     return () => clearTimeout(saveTimer.current);
-  }, [products]);
+  }, [products, cliente, listaPrecio, ivaOn]);
 
   const addEntries = (entries) => setProducts((prev) => [...prev, ...entries]);
   const updateProduct = (id, updated) => setProducts((prev) => prev.map((p) => (p.id === id ? updated : p)));
@@ -939,6 +1228,8 @@ function CotizadorInner() {
   const resetQuote = () => {
     setProducts([]);
     setSucursal("");
+    setCliente({ nombre: "", negocio: "" });
+    setShowClienteForm(false);
     setStatus("Nueva cotización iniciada");
     setTimeout(() => setStatus(""), 2000);
   };
@@ -953,7 +1244,7 @@ function CotizadorInner() {
 
   const confirmSave = async () => {
     const name = quoteName.trim() || `Cotización ${folio}`;
-    const entry = { id: `q_${Date.now()}`, name, date: today, products, sucursal };
+    const entry = { id: `q_${Date.now()}`, name, date: today, products, sucursal, cliente, listaPrecio, ivaOn };
     const list = [entry, ...savedQuotes].slice(0, 30);
     setSavedQuotes(list);
     await persistSavedQuotes(list);
@@ -966,6 +1257,9 @@ function CotizadorInner() {
   const loadQuote = (q) => {
     setProducts(q.products);
     if (q.sucursal) setSucursal(q.sucursal);
+    setCliente(q.cliente || { nombre: "", negocio: "" });
+    if (q.listaPrecio === "clasica" || q.listaPrecio === "casinos") setListaPrecio(q.listaPrecio);
+    if (typeof q.ivaOn === "boolean") setIvaOn(q.ivaOn);
     setShowSavedList(false);
     setStatus(`Cargada: ${q.name}`);
     setTimeout(() => setStatus(""), 2000);
@@ -1001,6 +1295,9 @@ function CotizadorInner() {
   }, [products, sucursal]);
 
   const totalCotizar = totals.costo + totals.distribucion;
+  const ivaMonto = ivaOn ? totalCotizar * IVA_RATE : 0;
+  const totalConIva = totalCotizar + ivaMonto;
+  const tieneClienteInfo = !!(cliente.nombre.trim() || cliente.negocio.trim());
 
   const escapeHtml = (s) =>
     String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -1024,6 +1321,14 @@ function CotizadorInner() {
         </tr>`;
       })
       .join("");
+
+    const filasTotales = [
+      totals.paquetesPlc > 0 ? `<tr><td>Paquetes PLC entregados</td><td style="text-align:right">${totals.paquetesPlc.toFixed(2)}</td></tr>` : "",
+      totals.bonificacion > 0 ? `<tr><td>Bonificación total</td><td style="text-align:right">${fmt(totals.bonificacion)}</td></tr>` : "",
+      totals.distribucion > 0 ? `<tr><td>Desglose de distribución</td><td style="text-align:right">${fmt(totals.distribucion)}</td></tr>` : "",
+      ivaOn ? `<tr><td>Subtotal (S/IVA)</td><td style="text-align:right">${fmt(totalCotizar)}</td></tr>` : "",
+      ivaOn ? `<tr><td>IVA (16%)</td><td style="text-align:right">${fmt(ivaMonto)}</td></tr>` : "",
+    ].join("");
 
     const html = `<!DOCTYPE html>
 <html lang="es">
@@ -1054,12 +1359,12 @@ function CotizadorInner() {
     <p class="sub">Resumen de cotización</p>
     <div class="meta"><span>Folio N.º ${folio}</span><span>${escapeHtml(today)}</span></div>
     ${sucursal ? `<div class="meta"><span>Clo</span><span>${escapeHtml(sucursal)}</span></div>` : ""}
+    ${cliente.nombre.trim() ? `<div class="meta"><span>Cliente</span><span>${escapeHtml(cliente.nombre.trim())}</span></div>` : ""}
+    ${cliente.negocio.trim() ? `<div class="meta"><span>Negocio</span><span>${escapeHtml(cliente.negocio.trim())}</span></div>` : ""}
     <table>${filas}</table>
     <table class="totales">
-      <tr><td>Paquetes PLC entregados</td><td style="text-align:right">${totals.paquetesPlc.toFixed(2)}</td></tr>
-      <tr><td>Bonificación total</td><td style="text-align:right">${fmt(totals.bonificacion)}</td></tr>
-      <tr><td>Desglose de distribución</td><td style="text-align:right">${fmt(totals.distribucion)}</td></tr>
-      <tr class="total-final"><td>TOTAL A COTIZAR</td><td style="text-align:right">${fmt(totalCotizar)}</td></tr>
+      ${filasTotales}
+      <tr class="total-final"><td>TOTAL A COTIZAR${ivaOn ? " (C/IVA)" : ""}</td><td style="text-align:right">${fmt(ivaOn ? totalConIva : totalCotizar)}</td></tr>
     </table>
   </div>
   <script>window.onload = function(){ window.print(); }</script>
@@ -1116,6 +1421,11 @@ function CotizadorInner() {
           </div>
         </div>
 
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <ListaPrecioToggle value={listaPrecio} onChange={setListaPrecio} />
+          <IvaToggle value={ivaOn} onChange={setIvaOn} />
+        </div>
+
         <div style={{ display: "flex", gap: 8 }}>
           <button className="ct-btn-ghost" onClick={() => setShowSaveInput(s => !s)} disabled={!sucursal} style={{ ...ghostBtn, flex: 1, opacity: !sucursal ? 0.4 : 1 }}>
             <Save size={16} /> Guardar
@@ -1127,6 +1437,24 @@ function CotizadorInner() {
             <RotateCcw size={16} />
           </button>
         </div>
+
+        <button
+          className="ct-btn-ghost"
+          onClick={() => setShowClienteForm((s) => !s)}
+          style={{ ...ghostBtn, justifyContent: "space-between", color: tieneClienteInfo ? COLORS.cyan : COLORS.inkMuted }}
+        >
+          <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <Users size={14} /> Datos del cliente (opcional)
+          </span>
+          <span style={{ fontSize: 11 }}>{tieneClienteInfo ? "Capturados" : showClienteForm ? "Ocultar" : "Agregar"}</span>
+        </button>
+
+        {showClienteForm && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: 14, borderRadius: 14, ...cardBase }}>
+            <TextField label="Nombre del cliente" value={cliente.nombre} onChange={(v) => setCliente((c) => ({ ...c, nombre: v }))} placeholder="Ej. Juan Pérez" />
+            <TextField label="Negocio / razón social" value={cliente.negocio} onChange={(v) => setCliente((c) => ({ ...c, negocio: v }))} placeholder="Ej. Abarrotes La Esquina" />
+          </div>
+        )}
 
         {status && (
           <div style={{ textAlign: "center", fontSize: 12, padding: 8, borderRadius: 12, backgroundColor: `${COLORS.green}12`, border: `1px solid ${COLORS.green}30`, color: COLORS.green, fontFamily: FONT_MONO }}>
@@ -1167,7 +1495,7 @@ function CotizadorInner() {
           </div>
         )}
 
-        <AddProductForm onAdd={addEntries} sucursal={sucursal} sucursalFalta={!sucursal} />
+        <AddProductForm onAdd={addEntries} sucursal={sucursal} sucursalFalta={!sucursal} catalogo={catalogoActivo} catalogoOptions={catalogoOptionsActivo} ivaOn={ivaOn} />
 
         {products.length === 0 ? (
           <div style={{ textAlign: "center", fontSize: 13, color: COLORS.inkMuted, padding: 16 }}>
@@ -1176,7 +1504,7 @@ function CotizadorInner() {
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             {products.map((p) => (
-              <ProductTicket key={p.id} product={p} sucursal={sucursal} onChange={(u) => updateProduct(p.id, u)} onRemove={() => removeProduct(p.id)} />
+              <ProductTicket key={p.id} product={p} sucursal={sucursal} ivaOn={ivaOn} onChange={(u) => updateProduct(p.id, u)} onRemove={() => removeProduct(p.id)} />
             ))}
           </div>
         )}
@@ -1197,28 +1525,14 @@ function CotizadorInner() {
               </div>
             </div>
 
+            <ClienteCloInfo sucursal={sucursal} cliente={cliente} />
+
             {products.map((p) => (
-              <div key={p.id} style={{ marginBottom: 10 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-                  <span>{p.tipo === "combo" ? p.principal.nombre : p.nombre}{p.tipo === "plc" && <span style={{ color: COLORS.gold }}> (PLC)</span>}</span>
-                  <span style={{ color: COLORS.inkMuted }}>{p.tipo === "combo" ? cantidadTextoSimple(p.principal) : cantidadTextoSimple(p)}</span>
-                </div>
-                {p.tipo === "combo" && (
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, paddingLeft: 12, color: COLORS.gold, marginTop: 2 }}>
-                    <span>↳ PLC: {p.plc.nombre}</span>
-                    <span style={{ color: COLORS.inkMuted }}>{cantidadTextoSimple(p.plc)}</span>
-                  </div>
-                )}
-              </div>
+              <ResumenLineaProducto key={p.id} p={p} ivaOn={ivaOn} />
             ))}
 
             <div style={{ borderTop: `1px solid ${COLORS.line}`, marginTop: 10, paddingTop: 10 }}>
-              <ResultLine label="Paquetes PLC entregados" value={totals.paquetesPlc.toFixed(2)} />
-              <ResultLine label="Bonificación total" value={fmt(totals.bonificacion)} />
-              <ResultLine label="Desglose de distribución" value={fmt(totals.distribucion)} />
-              <div style={{ borderTop: `1px solid ${COLORS.line}`, marginTop: 6, paddingTop: 6 }}>
-                <ResultLine label="TOTAL A COTIZAR" value={fmt(totalCotizar)} bold accent="green" />
-              </div>
+              <ResumenTotales totals={totals} totalCotizar={totalCotizar} ivaOn={ivaOn} ivaMonto={ivaMonto} totalConIva={totalConIva} />
             </div>
 
             <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
@@ -1332,35 +1646,14 @@ function CotizadorInner() {
                 <span>{today}</span>
               </div>
 
-              {sucursal && (
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, marginBottom: 16 }}>
-                  <span style={{ color: COLORS.inkMuted }}>Clo</span>
-                  <span style={{ fontWeight: 600, color: COLORS.ink }}>{sucursal}</span>
-                </div>
-              )}
+              <ClienteCloInfo sucursal={sucursal} cliente={cliente} />
 
               {products.map((p) => (
-                <div key={p.id} style={{ marginBottom: 10 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: COLORS.ink }}>
-                    <span>{p.tipo === "combo" ? p.principal.nombre : p.nombre}{p.tipo === "plc" && <span style={{ color: COLORS.gold }}> (PLC)</span>}</span>
-                    <span>{p.tipo === "combo" ? cantidadTextoSimple(p.principal) : cantidadTextoSimple(p)}</span>
-                  </div>
-                  {p.tipo === "combo" && (
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, paddingLeft: 12, color: COLORS.gold }}>
-                      <span>↳ PLC: {p.plc.nombre}</span>
-                      <span style={{ color: COLORS.inkMuted }}>{cantidadTextoSimple(p.plc)}</span>
-                    </div>
-                  )}
-                </div>
+                <ResumenLineaProducto key={p.id} p={p} ivaOn={ivaOn} />
               ))}
 
               <div style={{ borderTop: `1px solid ${COLORS.line}`, paddingTop: 12, marginTop: 8 }}>
-                <ResultLine label="Paquetes PLC entregados" value={totals.paquetesPlc.toFixed(2)} />
-                <ResultLine label="Bonificación total" value={fmt(totals.bonificacion)} />
-                <ResultLine label="Desglose de distribución" value={fmt(totals.distribucion)} />
-                <div style={{ borderTop: `1px solid ${COLORS.line}`, marginTop: 6, paddingTop: 6 }}>
-                  <ResultLine label="TOTAL A COTIZAR" value={fmt(totalCotizar)} bold accent="green" />
-                </div>
+                <ResumenTotales totals={totals} totalCotizar={totalCotizar} ivaOn={ivaOn} ivaMonto={ivaMonto} totalConIva={totalConIva} />
               </div>
             </div>
 
