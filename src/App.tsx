@@ -146,7 +146,11 @@ const costoDistribucionPorClo = (sucursal) => COSTOS_DISTRIBUCION[normalizeClo(s
    desglose de IVA es una opción de despliegue/cálculo del total, no
    altera los precios base guardados en cada línea de producto. */
 const IVA_RATE = 0.16;
-const precioConIva = (precio) => (Number(precio) || 0) * (1 + IVA_RATE);
+// Los precios de catálogo (ambas listas) ya vienen CON IVA incluido —
+// es el precio final que se cobra. Para desglosar, se divide entre
+// 1.16 para obtener el equivalente sin IVA; el precio con IVA nunca
+// cambia (es el mismo dato de catálogo).
+const precioSinIva = (precioConIva) => (Number(precioConIva) || 0) / (1 + IVA_RATE);
 
 /* Lista de precios "Clásica" — la de siempre, activa por default. */
 const CATALOGO_CLASICA = [
@@ -341,7 +345,7 @@ const sucursalOptions = SUCURSALES.map((s) => ({ value: s, label: s }));
    antes). */
 function precioPorPaqueteTexto(precio, ivaOn) {
   if (!precio) return null;
-  if (ivaOn) return `${fmt(precio)} s/IVA · ${fmt(precioConIva(precio))} c/IVA`;
+  if (ivaOn) return `${fmt(precioSinIva(precio))} s/IVA · ${fmt(precio)} c/IVA`;
   return `${fmt(precio)}/paq`;
 }
 
@@ -909,13 +913,13 @@ function ProductTicket({ product, onChange, onRemove, sucursal, ivaOn }) {
           <NumField label="Cajetillas" value={product.principal.cantidadCajetillas} onChange={(v) => updatePrincipal("cantidadCajetillas", v)} />
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
-          <span style={{ fontSize: 13, color: COLORS.inkMuted }}>Costo{ivaOn ? " (s/IVA)" : ""}</span>
+          <span style={{ fontSize: 13, color: COLORS.inkMuted }}>Costo</span>
           <span style={{ fontSize: 13, fontWeight: 600, color: COLORS.green }}>{fmt(r.costoLinea)}</span>
         </div>
         {ivaOn && (
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: 2 }}>
-            <span style={{ fontSize: 12, color: COLORS.inkMuted }}>Costo (c/IVA)</span>
-            <span style={{ fontSize: 12, fontWeight: 600, color: COLORS.inkMuted }}>{fmt(precioConIva(r.costoLinea))}</span>
+            <span style={{ fontSize: 12, color: COLORS.inkMuted }}>Costo (s/IVA)</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: COLORS.inkMuted }}>{fmt(precioSinIva(r.costoLinea))}</span>
           </div>
         )}
 
@@ -937,7 +941,7 @@ function ProductTicket({ product, onChange, onRemove, sucursal, ivaOn }) {
           <div style={{ borderTop: `1px solid ${COLORS.line}`, marginTop: 6, paddingTop: 6 }}>
             <ResultLine label="Precio descontando PLC" value={fmt(r.costoPorPaqueteConPlc)} bold accent="green" />
             {ivaOn && (
-              <ResultLine label="Precio descontando PLC (c/IVA)" value={fmt(precioConIva(r.costoPorPaqueteConPlc))} />
+              <ResultLine label="Precio descontando PLC (S/IVA)" value={fmt(precioSinIva(r.costoPorPaqueteConPlc))} />
             )}
             <ResultLine label="Margen de ganancia" value={`${r.margenGanancia.toFixed(2)}%`} bold />
           </div>
@@ -981,11 +985,11 @@ function ProductTicket({ product, onChange, onRemove, sucursal, ivaOn }) {
           <>
             <ResultLine label="Costo x paquete (lista)" value={fmt(product.precioPaquete)} />
             {ivaOn && (
-              <ResultLine label="Costo x paquete (c/IVA)" value={fmt(precioConIva(product.precioPaquete))} />
+              <ResultLine label="Costo x paquete (S/IVA)" value={fmt(precioSinIva(product.precioPaquete))} />
             )}
             <ResultLine label="Costo total de línea" value={fmt(r.costoTotal)} bold accent="green" />
             {ivaOn && (
-              <ResultLine label="Costo total de línea (c/IVA)" value={fmt(precioConIva(r.costoTotal))} />
+              <ResultLine label="Costo total de línea (S/IVA)" value={fmt(precioSinIva(r.costoTotal))} />
             )}
           </>
         )}
@@ -997,21 +1001,32 @@ function ProductTicket({ product, onChange, onRemove, sucursal, ivaOn }) {
 /* Línea de producto dentro del resumen final — nombre, cantidad y,
    cuando el producto tiene precio (no aplica a PLC cortesía), el
    precio por paquete con/sin IVA según la configuración. */
-function ResumenLineaProducto({ p, ivaOn }) {
+function ResumenLineaProducto({ p, ivaOn, isLast }) {
   const COLORS = useContext(ThemeContext);
   const precioBase = p.tipo === "combo" ? p.principal.precioPaquete : p.tipo === "plc" ? null : p.precioPaquete;
   const texto = precioBase ? precioPorPaqueteTexto(precioBase, ivaOn) : null;
   return (
-    <div style={{ marginBottom: 10 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: COLORS.ink }}>
-        <span>{p.tipo === "combo" ? p.principal.nombre : p.nombre}{p.tipo === "plc" && <span style={{ color: COLORS.gold }}> (PLC)</span>}</span>
-        <span style={{ color: COLORS.inkMuted }}>{p.tipo === "combo" ? cantidadTextoSimple(p.principal) : cantidadTextoSimple(p)}</span>
+    <div style={{ padding: "10px 0", borderBottom: isLast ? "none" : `1px solid ${COLORS.line}` }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
+        <span style={{ fontSize: 14, fontWeight: 600, color: COLORS.ink, lineHeight: 1.3 }}>
+          {p.tipo === "combo" ? p.principal.nombre : p.nombre}
+          {p.tipo === "plc" && (
+            <span style={{ fontSize: 9.5, fontWeight: 700, color: COLORS.gold, background: `${COLORS.gold}1e`, borderRadius: 6, padding: "1px 6px", marginLeft: 6, letterSpacing: "0.03em" }}>
+              PLC
+            </span>
+          )}
+        </span>
+        <span style={{ fontSize: 12.5, color: COLORS.inkMuted, fontFamily: FONT_MONO, whiteSpace: "nowrap", flexShrink: 0 }}>
+          {p.tipo === "combo" ? cantidadTextoSimple(p.principal) : cantidadTextoSimple(p)}
+        </span>
       </div>
-      {texto && <div style={{ fontSize: 11, color: COLORS.inkMuted, marginTop: 1 }}>{texto}</div>}
+      {texto && (
+        <div style={{ fontSize: 11, color: COLORS.inkMuted, fontFamily: FONT_MONO, marginTop: 3 }}>{texto}</div>
+      )}
       {p.tipo === "combo" && (
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, paddingLeft: 12, color: COLORS.gold, marginTop: 2 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, paddingLeft: 12, color: COLORS.gold, marginTop: 5 }}>
           <span>↳ PLC: {p.plc.nombre}</span>
-          <span style={{ color: COLORS.inkMuted }}>{cantidadTextoSimple(p.plc)}</span>
+          <span style={{ color: COLORS.inkMuted, fontFamily: FONT_MONO }}>{cantidadTextoSimple(p.plc)}</span>
         </div>
       )}
     </div>
@@ -1020,54 +1035,74 @@ function ResumenLineaProducto({ p, ivaOn }) {
 
 /* Totales del resumen final — cada línea (PLC entregado, bonificación,
    distribución) solo aparece si aplica (valor > 0), y el desglose de
-   IVA solo si está activado. */
-function ResumenTotales({ totals, totalCotizar, ivaOn, ivaMonto, totalConIva }) {
+   IVA solo si está activado. El total final se destaca en una franja
+   con degradado, igual que el botón "Descargar PDF". */
+function ResumenTotales({ totals, totalCotizar, ivaOn, ivaMonto, totalSinIva }) {
   const COLORS = useContext(ThemeContext);
+  const detalles = [
+    totals.paquetesPlc > 0 && { label: "Paquetes PLC entregados", value: totals.paquetesPlc.toFixed(2) },
+    totals.bonificacion > 0 && { label: "Bonificación total", value: fmt(totals.bonificacion) },
+    totals.distribucion > 0 && { label: "Desglose de distribución", value: fmt(totals.distribucion) },
+    ivaOn && { label: "Subtotal (S/IVA)", value: fmt(totalSinIva) },
+    ivaOn && { label: "IVA (16%)", value: fmt(ivaMonto) },
+  ].filter(Boolean);
+
   return (
     <>
-      {totals.paquetesPlc > 0 && <ResultLine label="Paquetes PLC entregados" value={totals.paquetesPlc.toFixed(2)} />}
-      {totals.bonificacion > 0 && <ResultLine label="Bonificación total" value={fmt(totals.bonificacion)} />}
-      {totals.distribucion > 0 && <ResultLine label="Desglose de distribución" value={fmt(totals.distribucion)} />}
-      {ivaOn && (
-        <>
-          <ResultLine label="Subtotal (S/IVA)" value={fmt(totalCotizar)} />
-          <ResultLine label="IVA (16%)" value={fmt(ivaMonto)} />
-        </>
+      {detalles.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 12 }}>
+          {detalles.map((d) => (
+            <div key={d.label} style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: COLORS.inkMuted, fontFamily: FONT_MONO }}>
+              <span>{d.label}</span>
+              <span>{d.value}</span>
+            </div>
+          ))}
+        </div>
       )}
-      <div style={{ borderTop: `1px solid ${COLORS.line}`, marginTop: 6, paddingTop: 6 }}>
-        <ResultLine label={`TOTAL A COTIZAR${ivaOn ? " (C/IVA)" : ""}`} value={fmt(ivaOn ? totalConIva : totalCotizar)} bold accent="green" />
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: "13px 16px",
+          borderRadius: 14,
+          background: `linear-gradient(135deg, ${COLORS.cyan}, ${COLORS.green})`,
+          boxShadow: `0 8px 20px ${COLORS.cyan}33`,
+        }}
+      >
+        <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "rgba(255,255,255,0.92)" }}>
+          Total a cotizar{ivaOn ? " (c/IVA)" : ""}
+        </span>
+        <span style={{ fontSize: 19, fontWeight: 800, color: "#FFFFFF", fontFamily: FONT_MONO }}>
+          {fmt(totalCotizar)}
+        </span>
       </div>
     </>
   );
 }
 
-/* Clo + datos del cliente (si se capturaron) arriba del listado de
-   productos en el resumen final. */
-function ClienteCloInfo({ sucursal, cliente }) {
+/* Folio, fecha, Clo y datos del cliente (si se capturaron) en una
+   caja compacta de "ficha" arriba del listado de productos. */
+function ClienteCloInfo({ folio, today, sucursal, cliente }) {
   const COLORS = useContext(ThemeContext);
   const nombre = (cliente?.nombre || "").trim();
   const negocio = (cliente?.negocio || "").trim();
-  if (!sucursal && !nombre && !negocio) return null;
+  const filas = [
+    folio != null && { label: "Folio N.º", value: folio },
+    today && { label: "Fecha", value: today },
+    sucursal && { label: "Clo", value: sucursal },
+    nombre && { label: "Cliente", value: nombre },
+    negocio && { label: "Negocio", value: negocio },
+  ].filter(Boolean);
+  if (filas.length === 0) return null;
   return (
-    <div style={{ marginBottom: 14, display: "flex", flexDirection: "column", gap: 4 }}>
-      {sucursal && (
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-          <span style={{ color: COLORS.inkMuted }}>Clo</span>
-          <span style={{ fontWeight: 600, color: COLORS.ink }}>{sucursal}</span>
+    <div style={{ background: COLORS.inputBg, border: `1px solid ${COLORS.line}`, borderRadius: 14, padding: "10px 14px", marginBottom: 16, display: "flex", flexDirection: "column", gap: 4 }}>
+      {filas.map((f) => (
+        <div key={f.label} style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, fontFamily: FONT_MONO }}>
+          <span style={{ color: COLORS.inkMuted }}>{f.label}</span>
+          <span style={{ fontWeight: 700, color: COLORS.ink }}>{f.value}</span>
         </div>
-      )}
-      {nombre && (
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-          <span style={{ color: COLORS.inkMuted }}>Cliente</span>
-          <span style={{ fontWeight: 600, color: COLORS.ink }}>{nombre}</span>
-        </div>
-      )}
-      {negocio && (
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-          <span style={{ color: COLORS.inkMuted }}>Negocio</span>
-          <span style={{ fontWeight: 600, color: COLORS.ink }}>{negocio}</span>
-        </div>
-      )}
+      ))}
     </div>
   );
 }
@@ -1295,8 +1330,11 @@ function CotizadorInner() {
   }, [products, sucursal]);
 
   const totalCotizar = totals.costo + totals.distribucion;
-  const ivaMonto = ivaOn ? totalCotizar * IVA_RATE : 0;
-  const totalConIva = totalCotizar + ivaMonto;
+  // Los precios de catálogo ya incluyen IVA, así que totalCotizar YA
+  // es el total final a cobrar (con IVA). El desglose solo separa esa
+  // misma cifra en sin-IVA + IVA — nunca se le suma nada extra encima.
+  const totalSinIva = ivaOn ? precioSinIva(totalCotizar) : 0;
+  const ivaMonto = ivaOn ? totalCotizar - totalSinIva : 0;
   const tieneClienteInfo = !!(cliente.nombre.trim() || cliente.negocio.trim());
 
   const escapeHtml = (s) =>
@@ -1305,29 +1343,47 @@ function CotizadorInner() {
   const descargarResumenHtml = () => {
     const filas = products
       .map((p) => {
+        const precioBase = p.tipo === "combo" ? p.principal.precioPaquete : p.tipo === "plc" ? null : p.precioPaquete;
+        const precioTxt = precioBase ? precioPorPaqueteTexto(precioBase, ivaOn) : null;
         if (p.tipo === "combo") {
-          return `<tr>
-            <td>${escapeHtml(p.principal.nombre)}</td>
-            <td style="text-align:right">${escapeHtml(cantidadTextoSimple(p.principal))}</td>
-          </tr>
-          <tr>
-            <td style="padding-left:16px;color:#B3792E">↳ PLC: ${escapeHtml(p.plc.nombre)}</td>
-            <td style="text-align:right">${escapeHtml(cantidadTextoSimple(p.plc))}</td>
-          </tr>`;
+          return `
+          <div class="item">
+            <div class="item-row">
+              <span class="item-name">${escapeHtml(p.principal.nombre)}</span>
+              <span class="item-qty">${escapeHtml(cantidadTextoSimple(p.principal))}</span>
+            </div>
+            ${precioTxt ? `<div class="item-price">${escapeHtml(precioTxt)}</div>` : ""}
+            <div class="item-row item-plc">
+              <span>↳ PLC: ${escapeHtml(p.plc.nombre)}</span>
+              <span class="item-qty">${escapeHtml(cantidadTextoSimple(p.plc))}</span>
+            </div>
+          </div>`;
         }
-        return `<tr>
-          <td>${escapeHtml(p.nombre)}${p.tipo === "plc" ? ' <span style="color:#B3792E">(PLC)</span>' : ""}</td>
-          <td style="text-align:right">${escapeHtml(cantidadTextoSimple(p))}</td>
-        </tr>`;
+        return `
+          <div class="item">
+            <div class="item-row">
+              <span class="item-name">${escapeHtml(p.nombre)}${p.tipo === "plc" ? ' <span class="tag-plc">PLC</span>' : ""}</span>
+              <span class="item-qty">${escapeHtml(cantidadTextoSimple(p))}</span>
+            </div>
+            ${precioTxt ? `<div class="item-price">${escapeHtml(precioTxt)}</div>` : ""}
+          </div>`;
       })
       .join("");
 
     const filasTotales = [
-      totals.paquetesPlc > 0 ? `<tr><td>Paquetes PLC entregados</td><td style="text-align:right">${totals.paquetesPlc.toFixed(2)}</td></tr>` : "",
-      totals.bonificacion > 0 ? `<tr><td>Bonificación total</td><td style="text-align:right">${fmt(totals.bonificacion)}</td></tr>` : "",
-      totals.distribucion > 0 ? `<tr><td>Desglose de distribución</td><td style="text-align:right">${fmt(totals.distribucion)}</td></tr>` : "",
-      ivaOn ? `<tr><td>Subtotal (S/IVA)</td><td style="text-align:right">${fmt(totalCotizar)}</td></tr>` : "",
-      ivaOn ? `<tr><td>IVA (16%)</td><td style="text-align:right">${fmt(ivaMonto)}</td></tr>` : "",
+      totals.paquetesPlc > 0 ? `<div class="tot-row"><span>Paquetes PLC entregados</span><span>${totals.paquetesPlc.toFixed(2)}</span></div>` : "",
+      totals.bonificacion > 0 ? `<div class="tot-row"><span>Bonificación total</span><span>${fmt(totals.bonificacion)}</span></div>` : "",
+      totals.distribucion > 0 ? `<div class="tot-row"><span>Desglose de distribución</span><span>${fmt(totals.distribucion)}</span></div>` : "",
+      ivaOn ? `<div class="tot-row"><span>Subtotal (S/IVA)</span><span>${fmt(totalSinIva)}</span></div>` : "",
+      ivaOn ? `<div class="tot-row"><span>IVA (16%)</span><span>${fmt(ivaMonto)}</span></div>` : "",
+    ].join("");
+
+    const filasMeta = [
+      `<div class="meta-row"><span>Folio N.º</span><span>${folio}</span></div>`,
+      `<div class="meta-row"><span>Fecha</span><span>${escapeHtml(today)}</span></div>`,
+      sucursal ? `<div class="meta-row"><span>Clo</span><span>${escapeHtml(sucursal)}</span></div>` : "",
+      cliente.nombre.trim() ? `<div class="meta-row"><span>Cliente</span><span>${escapeHtml(cliente.nombre.trim())}</span></div>` : "",
+      cliente.negocio.trim() ? `<div class="meta-row"><span>Negocio</span><span>${escapeHtml(cliente.negocio.trim())}</span></div>` : "",
     ].join("");
 
     const html = `<!DOCTYPE html>
@@ -1336,18 +1392,30 @@ function CotizadorInner() {
   <meta charset="UTF-8" />
   <title>Cotización ${folio}</title>
   <style>
-    body { font-family: -apple-system, system-ui, sans-serif; background:#F1F4F9; padding:24px; color:#141B29; }
-    .ticket { max-width:420px; margin:0 auto; background:#FFFFFF; padding:24px; border-radius:16px; border:1px solid rgba(20,27,41,0.10); box-shadow:0 20px 50px rgba(20,27,41,0.10); }
-    .letterhead { display:flex; align-items:center; gap:14px; margin-bottom:16px; }
-    .logo-box { width:52px; height:52px; border-radius:10px; border:1px solid rgba(20,27,41,0.14); display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0; }
-    .logo-box img { width:100%; height:100%; object-fit:contain; padding:5px; box-sizing:border-box; }
-    h1 { text-align:right; flex:1; font-size:19px; margin:0; letter-spacing:0.06em; color:#141B29; }
-    .sub { text-align:center; font-size:12px; color:#5C6779; margin-bottom:12px; }
-    .meta { display:flex; justify-content:space-between; font-size:12px; color:#5C6779; border-top:1px solid rgba(20,27,41,0.10); padding-top:8px; margin-top:8px; font-family:'JetBrains Mono',ui-monospace,monospace; }
-    table { width:100%; border-collapse:collapse; margin-top:16px; font-size:13px; }
-    td { padding:5px 0; }
-    .totales td { border-top:1px solid rgba(20,27,41,0.10); padding-top:8px; color:#141B29; font-weight:600; }
-    .total-final td { font-weight:800; font-size:16px; color:#2E9A6C; border-top:1px solid rgba(20,27,41,0.10); padding-top:8px; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background:#EEF2F8; padding:32px 16px; color:#141B29; }
+    .ticket { max-width:430px; margin:0 auto; background:#FFFFFF; padding:28px 26px; border-radius:22px; border:1px solid rgba(20,27,41,0.08); box-shadow:0 24px 60px rgba(20,27,41,0.12); }
+    .letterhead { display:flex; align-items:center; gap:14px; margin-bottom:20px; }
+    .logo-box { width:54px; height:54px; border-radius:14px; border:1px solid rgba(20,27,41,0.10); display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0; }
+    .logo-box img { width:100%; height:100%; object-fit:contain; padding:6px; box-sizing:border-box; }
+    h1 { text-align:right; flex:1; font-size:20px; margin:0; letter-spacing:0.07em; font-weight:800; color:#141B29; }
+    .sub { text-align:center; font-size:12.5px; text-transform:uppercase; letter-spacing:0.1em; color:#8793A6; margin:0 0 18px; font-weight:600; }
+    .meta-box { background:#F7F9FC; border:1px solid rgba(20,27,41,0.06); border-radius:14px; padding:12px 14px; margin-bottom:20px; }
+    .meta-row { display:flex; justify-content:space-between; font-size:12.5px; color:#5C6779; padding:3px 0; font-family:'JetBrains Mono',ui-monospace,monospace; }
+    .meta-row span:last-child { color:#141B29; font-weight:700; }
+    .items { display:flex; flex-direction:column; gap:14px; padding-bottom:16px; border-bottom:1px solid rgba(20,27,41,0.08); }
+    .item-row { display:flex; justify-content:space-between; align-items:baseline; font-size:14.5px; }
+    .item-name { font-weight:600; color:#141B29; }
+    .item-qty { color:#5C6779; font-family:'JetBrains Mono',ui-monospace,monospace; font-size:13px; white-space:nowrap; padding-left:10px; }
+    .item-price { font-size:11.5px; color:#8793A6; font-family:'JetBrains Mono',ui-monospace,monospace; margin-top:2px; }
+    .item-plc { font-size:12.5px; color:#B3792E; padding-left:12px; margin-top:3px; }
+    .tag-plc { font-size:10px; font-weight:700; color:#B3792E; background:rgba(179,121,46,0.12); padding:1px 6px; border-radius:6px; letter-spacing:0.03em; }
+    .totales { padding-top:14px; display:flex; flex-direction:column; gap:2px; }
+    .tot-row { display:flex; justify-content:space-between; font-size:13px; color:#5C6779; padding:3px 0; font-family:'JetBrains Mono',ui-monospace,monospace; }
+    .total-final { display:flex; justify-content:space-between; align-items:center; margin-top:12px; padding:14px 18px; border-radius:16px; background:linear-gradient(135deg,#0E8FA8,#2E9A6C); box-shadow:0 10px 24px rgba(14,143,168,0.28); }
+    .total-final span:first-child { color:rgba(255,255,255,0.9); font-size:12px; text-transform:uppercase; letter-spacing:0.06em; font-weight:700; }
+    .total-final span:last-child { color:#FFFFFF; font-size:19px; font-weight:800; font-family:'JetBrains Mono',ui-monospace,monospace; }
+    .footer-note { text-align:center; font-size:11.5px; color:#8793A6; margin-top:18px; line-height:1.5; }
   </style>
 </head>
 <body>
@@ -1357,15 +1425,13 @@ function CotizadorInner() {
       <h1>COTIZADOR</h1>
     </div>
     <p class="sub">Resumen de cotización</p>
-    <div class="meta"><span>Folio N.º ${folio}</span><span>${escapeHtml(today)}</span></div>
-    ${sucursal ? `<div class="meta"><span>Clo</span><span>${escapeHtml(sucursal)}</span></div>` : ""}
-    ${cliente.nombre.trim() ? `<div class="meta"><span>Cliente</span><span>${escapeHtml(cliente.nombre.trim())}</span></div>` : ""}
-    ${cliente.negocio.trim() ? `<div class="meta"><span>Negocio</span><span>${escapeHtml(cliente.negocio.trim())}</span></div>` : ""}
-    <table>${filas}</table>
-    <table class="totales">
+    <div class="meta-box">${filasMeta}</div>
+    <div class="items">${filas}</div>
+    <div class="totales">
       ${filasTotales}
-      <tr class="total-final"><td>TOTAL A COTIZAR${ivaOn ? " (C/IVA)" : ""}</td><td style="text-align:right">${fmt(ivaOn ? totalConIva : totalCotizar)}</td></tr>
-    </table>
+      <div class="total-final"><span>Total a cotizar${ivaOn ? " (c/IVA)" : ""}</span><span>${fmt(totalCotizar)}</span></div>
+    </div>
+    <p class="footer-note">No olvides ofrecer a todos tus clientes marcas estratégicas como la familia Mix, familia Baronet y la nueva familia Faritos.</p>
   </div>
   <script>window.onload = function(){ window.print(); }</script>
 </body>
@@ -1510,8 +1576,8 @@ function CotizadorInner() {
         )}
 
         {products.length > 0 && (
-          <div style={{ ...cardBase, padding: 16 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+          <div style={{ ...cardBase, padding: 18 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
               <div style={{ width: 34, height: 34, borderRadius: 8, background: COLORS.logoBoxBg, border: `1px solid ${COLORS.line}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" }}>
                 <img
                   src={LOGO_URL}
@@ -1520,20 +1586,20 @@ function CotizadorInner() {
                   onError={(e) => { e.currentTarget.style.display = "none"; }}
                 />
               </div>
-              <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.08em", color: COLORS.inkMuted }}>
+              <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: COLORS.inkMuted }}>
                 Resumen de cotización
               </div>
             </div>
 
-            <ClienteCloInfo sucursal={sucursal} cliente={cliente} />
+            <ClienteCloInfo folio={folio} today={today} sucursal={sucursal} cliente={cliente} />
 
-            {products.map((p) => (
-              <ResumenLineaProducto key={p.id} p={p} ivaOn={ivaOn} />
-            ))}
-
-            <div style={{ borderTop: `1px solid ${COLORS.line}`, marginTop: 10, paddingTop: 10 }}>
-              <ResumenTotales totals={totals} totalCotizar={totalCotizar} ivaOn={ivaOn} ivaMonto={ivaMonto} totalConIva={totalConIva} />
+            <div style={{ marginBottom: 14 }}>
+              {products.map((p, i) => (
+                <ResumenLineaProducto key={p.id} p={p} ivaOn={ivaOn} isLast={i === products.length - 1} />
+              ))}
             </div>
+
+            <ResumenTotales totals={totals} totalCotizar={totalCotizar} ivaOn={ivaOn} ivaMonto={ivaMonto} totalSinIva={totalSinIva} />
 
             <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
               <button
@@ -1615,9 +1681,9 @@ function CotizadorInner() {
               </button>
             </div>
 
-            <div style={{ ...cardBase, padding: 20 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-                <div style={{ width: 48, height: 48, borderRadius: 10, background: COLORS.logoBoxBg, border: `1px solid ${COLORS.line}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" }}>
+            <div style={{ ...cardBase, padding: 22 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
+                <div style={{ width: 48, height: 48, borderRadius: 12, background: COLORS.logoBoxBg, border: `1px solid ${COLORS.line}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" }}>
                   <img
                     src={LOGO_URL}
                     alt="Logo"
@@ -1632,29 +1698,24 @@ function CotizadorInner() {
                     <span style={{ fontSize: 5.5, fontFamily: FONT_MONO, textAlign: "center", lineHeight: 1.1 }}>ESPACIO<br />LOGO</span>
                   </div>
                 </div>
-                <div style={{ flex: 1, textAlign: "right", fontSize: 18, fontWeight: 800, letterSpacing: "0.08em", color: COLORS.ink }}>
+                <div style={{ flex: 1, textAlign: "right", fontSize: 19, fontWeight: 800, letterSpacing: "0.08em", color: COLORS.ink }}>
                   COTIZADOR
                 </div>
               </div>
 
-              <div style={{ textAlign: "center", fontSize: 14, color: COLORS.inkMuted, marginBottom: 12 }}>
+              <div style={{ textAlign: "center", fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: COLORS.inkMuted, marginBottom: 16 }}>
                 Resumen de cotización
               </div>
 
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: COLORS.inkMuted, borderBottom: `1px solid ${COLORS.line}`, paddingBottom: 8, marginBottom: 12, fontFamily: FONT_MONO }}>
-                <span>Folio N.º {folio}</span>
-                <span>{today}</span>
+              <ClienteCloInfo folio={folio} today={today} sucursal={sucursal} cliente={cliente} />
+
+              <div style={{ marginBottom: 16 }}>
+                {products.map((p, i) => (
+                  <ResumenLineaProducto key={p.id} p={p} ivaOn={ivaOn} isLast={i === products.length - 1} />
+                ))}
               </div>
 
-              <ClienteCloInfo sucursal={sucursal} cliente={cliente} />
-
-              {products.map((p) => (
-                <ResumenLineaProducto key={p.id} p={p} ivaOn={ivaOn} />
-              ))}
-
-              <div style={{ borderTop: `1px solid ${COLORS.line}`, paddingTop: 12, marginTop: 8 }}>
-                <ResumenTotales totals={totals} totalCotizar={totalCotizar} ivaOn={ivaOn} ivaMonto={ivaMonto} totalConIva={totalConIva} />
-              </div>
+              <ResumenTotales totals={totals} totalCotizar={totalCotizar} ivaOn={ivaOn} ivaMonto={ivaMonto} totalSinIva={totalSinIva} />
             </div>
 
             <div style={{ textAlign: "center", fontSize: 12, color: COLORS.inkMuted, marginTop: 16 }}>
