@@ -341,11 +341,44 @@ const sucursalOptions = SUCURSALES.map((s) => ({ value: s, label: s }));
 
 /* Texto de precio por paquete: si el desglose de IVA está activo,
    muestra sin IVA y con IVA lado a lado; si no, un solo precio (como
-   antes). */
+   antes). Se usa para la vista previa del catálogo (antes de fijar
+   cantidades), donde el precio de referencia siempre es por paquete. */
 function precioPorPaqueteTexto(precio, ivaOn) {
   if (!precio) return null;
-  if (ivaOn) return `${fmt(precioSinIva(precio))} s/IVA · ${fmt(precio)} c/IVA`;
+  if (ivaOn) return `${fmt(precioSinIva(precio))} s/IVA · ${fmt(precio)} c/IVA /paq`;
   return `${fmt(precio)}/paq`;
+}
+
+/* Texto de precio para una línea YA agregada a la cotización: usa la
+   misma unidad (paquete o cajetilla) en la que está capturada esa
+   línea, para que el precio mostrado siempre coincida con la cantidad
+   de al lado. cajetillasPorPaquete (ya viene en cada producto del
+   catálogo) es lo que permite convertir precio por paquete → por
+   cajetilla. Si la línea mezcla paquetes y cajetillas sueltas, se
+   muestran ambas unidades. */
+function precioLineaTexto(item, ivaOn) {
+  const precioPaq = Number(item?.precioPaquete) || 0;
+  if (!precioPaq) return null;
+  const cajPorPaq = Number(item.cajetillasPorPaquete) || 1;
+  const precioCaj = precioPaq / cajPorPaq;
+  const tienePaq = Number(item.cantidadPaquetes) > 0;
+  const tieneCaj = Number(item.cantidadCajetillas) > 0;
+
+  if (tieneCaj && !tienePaq) {
+    return ivaOn
+      ? `${fmt(precioSinIva(precioCaj))} s/IVA · ${fmt(precioCaj)} c/IVA /caj`
+      : `${fmt(precioCaj)}/caj`;
+  }
+  if (tienePaq && !tieneCaj) {
+    return ivaOn
+      ? `${fmt(precioSinIva(precioPaq))} s/IVA · ${fmt(precioPaq)} c/IVA /paq`
+      : `${fmt(precioPaq)}/paq`;
+  }
+  // Cantidad mixta (paquetes + cajetillas sueltas) o aún sin capturar:
+  // se muestran ambas unidades para no dar ambigüedad.
+  return ivaOn
+    ? `${fmt(precioPaq)}/paq · ${fmt(precioCaj)}/caj (c/IVA)`
+    : `${fmt(precioPaq)}/paq · ${fmt(precioCaj)}/caj`;
 }
 
 /* ---------------------------------------------------------------------
@@ -999,11 +1032,12 @@ function ProductTicket({ product, onChange, onRemove, sucursal, ivaOn }) {
 
 /* Línea de producto dentro del resumen final — nombre, cantidad y,
    cuando el producto tiene precio (no aplica a PLC cortesía), el
-   precio por paquete con/sin IVA según la configuración. */
+   precio en la MISMA unidad en la que está la cantidad (paquete o
+   cajetilla) con/sin IVA según la configuración. */
 function ResumenLineaProducto({ p, ivaOn, isLast }) {
   const COLORS = useContext(ThemeContext);
-  const precioBase = p.tipo === "combo" ? p.principal.precioPaquete : p.tipo === "plc" ? null : p.precioPaquete;
-  const texto = precioBase ? precioPorPaqueteTexto(precioBase, ivaOn) : null;
+  const item = p.tipo === "combo" ? p.principal : p.tipo === "plc" ? null : p;
+  const texto = item ? precioLineaTexto(item, ivaOn) : null;
   return (
     <div style={{ padding: "10px 0", borderBottom: isLast ? "none" : `1px solid ${COLORS.line}` }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
@@ -1342,8 +1376,8 @@ function CotizadorInner() {
   const descargarResumenHtml = () => {
     const filas = products
       .map((p) => {
-        const precioBase = p.tipo === "combo" ? p.principal.precioPaquete : p.tipo === "plc" ? null : p.precioPaquete;
-        const precioTxt = precioBase ? precioPorPaqueteTexto(precioBase, ivaOn) : null;
+        const item = p.tipo === "combo" ? p.principal : p.tipo === "plc" ? null : p;
+        const precioTxt = item ? precioLineaTexto(item, ivaOn) : null;
         if (p.tipo === "combo") {
           return `
           <div class="item">
